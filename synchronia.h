@@ -44,19 +44,14 @@ struct RecvFlow{
 struct Coflow {
     uint32_t job_id;
     uint32_t num_send_flows;
-    struct SendFlow *sends;
     uint32_t num_recv_flows;
+    struct SendFlow *sends;
     struct RecvFlow *recvs;
 };
 
 struct __attribute__((packed, aligned(4))) __send_flow {
     uint32_t data_id;
     uint32_t size;
-};
-
-struct __attribute__((packed, aligned(4))) __coflow {
-    uint32_t job_id;
-    uint32_t num_flows;
 };
 
 
@@ -147,34 +142,42 @@ int create_send_flow(struct SendFlow *f) {
 
 /* 
  * Message format:
- * -------------------------------------------
- * | Job Id   | Num Flows | (Data Id, Size)...
- * | u32: 4B  | u32: 4B   | (u32, u32):8B...
- * -------------------------------------------
+ * -------------------------------------------------------------------------------
+ * | Job Id   | Num Send Flows | Num Recv Flows | (Data Id, Size)...| Data Id... |
+ * | u32: 4B  | u32: 4B        | u32: 4B        |   (u32, u32):8B...| u32: 4B... |
+ * -------------------------------------------------------------------------------
  */
 int send_to_scheduler(int scheduler_sock, struct Coflow *cf) {
-    int i;
+    size_t i;
     int sent;
     size_t buf_len;
-    struct __coflow *buf;
+    struct Coflow *buf;
     struct __send_flow *curr;
+    uint32_t *curr_int;
     void *to_send;
     size_t cum_sent = 0;
 
-    buf_len = 2 * sizeof(uint32_t) + cf->num_send_flows * 2 * sizeof(uint32_t);
+    buf_len = 3 * sizeof(uint32_t) + cf->num_send_flows * sizeof(__send_flow) + cf->num_recv_flows * sizeof(uint32_t);
     to_send = malloc(buf_len);
     if (to_send == NULL) {
         return -1;
     }
 
-    buf = (struct __coflow*) to_send;
+    buf = (struct Coflow*) to_send;
     buf->job_id = cf->job_id;
-    buf->num_flows = cf->num_send_flows;
-    curr = (struct __send_flow*) buf + sizeof(struct __coflow);
+    buf->num_send_flows = cf->num_send_flows;
+    buf->num_recv_flows = cf->num_recv_flows;
+    curr = (struct __send_flow*) (((uint32_t*) buf) + 3 * sizeof(uint32_t));
     for (i = 0; i < cf->num_send_flows; i++) {
         curr->data_id = cf->sends[i].data_id;
         curr->size = cf->sends[i].size;
         curr += sizeof(struct __send_flow);
+    }
+
+    curr_int = (uint32_t*) curr;
+    for (i = 0; i < cf->num_recv_flows; i++) {
+        *curr_int = cf->recvs[i].data_id;
+        curr_int += sizeof(uint32_t);
     }
 
     while (cum_sent < buf_len) {
@@ -320,6 +323,8 @@ int send_coflows(int scheduler_sock, struct Coflow *cfs, int num_coflows) {
     }
 
     ok = recv_from_scheduler(scheduler_sock, num_coflows, buf, buf_size);
+
+    // prioritize and send the flows somehow, based on received ordering...
     return ok;
 };
 
