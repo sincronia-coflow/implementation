@@ -1,0 +1,4 @@
+*.capnp.c++
+*.capnp.h
+*.capnp.go
+sinchronia-scheduler

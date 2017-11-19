@@ -46,7 +46,7 @@ func deserialize(conn *net.Conn, cfs chan Coflow) {
 	dec := json.NewDecoder(conn)
 	var rcfs []RecvCoflow
 	for {
-		if err := dec.Decode(&rcf); err != nil {
+		if err := dec.Decode(&rcfs); err != nil {
 			log.WithFields(log.Fields{
 				"err": err,
 			}).Warn("recv/decode")
@@ -55,7 +55,7 @@ func deserialize(conn *net.Conn, cfs chan Coflow) {
 		// for each coflow for which the priority and receivers were specified
 		for rcf := range rcfs {
 			rcvf := make([]RecvFlow, 0, len(rcf.Receiving))
-			for rd := range rcv.Receiving {
+			for rd := range rcf.Receiving {
 				rcvf = append(rcvf, RecvFlow{
 					JobID:  rcf.JobID,
 					DataID: rd.DataID,
