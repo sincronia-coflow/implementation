@@ -1,23 +1,23 @@
 package client
 
 import (
+	"context"
 	"net"
+
+	"./scheduler"
 
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/net/ipv4"
+	"zombiezen.com/go/capnproto2/rpc"
 )
 
-// SendFlow is an outgoing flow
-type SendFlow struct {
-	DataID uint32   // which piece of data this is (flow id)
-	To     net.Addr // flow destination
-	Data   []uint8  // data to send
-
-	sendNow chan uint32 // get priority to send with
+type sendFlow struct {
+	f       Flow
+	sendNow chan uint8 // get priority to send with
 }
 
-// https://en.wikipedia.org/wiki/Differentiated_services
 /*
+https://en.wikipedia.org/wiki/Differentiated_services
 DSCP_value  Hex_value  Decimal_value  Meaning                    Drop_probability  Equivalent_IP_precedence_value
 101_110     0x2e       46             Expedited_forwarding_(EF)  N/A               101-Critical
 000_000     0x00       0              Best_effort                N/A               000-Routine
@@ -53,17 +53,30 @@ func diffServFromPriority(prio uint8) int {
 	case 7:
 		return 0x1e
 	}
+
+	panic("unreachable uint8")
 }
 
-func (f SendFlow) send() {
-	prio := <-f.sendNow
-	prio := diffServFromPriority(prio)
+func (f sendFlow) send(ctx context.Context, job uint32, nodeMap map[uint32]string) {
+	givenPrio := <-f.sendNow
+	prio := diffServFromPriority(uint8(givenPrio))
 
-	conn, err = net.Dial("tcp4", f.To)
+	toAddr, ok := nodeMap[f.f.To]
+	if !ok {
+		log.WithFields(log.Fields{
+			"To":       f.f.To,
+			"Priority": prio,
+			"NodeMap":  nodeMap,
+		}).Error("Could not resolve address")
+		return
+	}
+
+	conn, err := net.Dial("tcp4", toAddr)
+	defer conn.Close()
 	if err != nil {
 		log.WithFields(log.Fields{
-			"DataID":   f.DataId,
-			"To":       f.To,
+			"DataID":   f.f.Info.DataID,
+			"To":       f.f.To,
 			"Priority": prio,
 		}).Error("Dial", err)
 		return
@@ -72,26 +85,42 @@ func (f SendFlow) send() {
 	// set DiffServ bits
 	if err := ipv4.NewConn(conn).SetTOS(prio); err != nil {
 		log.WithFields(log.Fields{
-			"DataID":   f.DataId,
-			"To":       f.To,
+			"DataID":   f.f.Info.DataID,
+			"To":       f.f.To,
 			"Priority": prio,
 		}).Error("setting DiffServ", err)
 	}
 
-	written, err := conn.Write(f.Data)
-	if err != nil {
-		log.WithFields(log.Fields{
-			"DataID":   f.DataId,
-			"To":       f.To,
-			"Priority": prio,
-		}).Error("Conn write", err)
-		return
-	}
+	rpcConn := rpc.NewConn(rpc.StreamTransport(conn))
+	client := scheduler.Receiver{Client: rpcConn.Bootstrap(ctx)}
+
+	client.Send(
+		ctx,
+		func(
+			p scheduler.Receiver_send_Params,
+		) error {
+			d, err := p.NewData()
+			if err != nil {
+				log.WithFields(log.Fields{
+					"DataID":   f.f.Info.DataID,
+					"To":       f.f.To,
+					"Priority": prio,
+				}).Error("send - rpc send", err)
+				return err
+			}
+
+			d.SetJobID(job)
+			d.SetDataID(f.f.Info.DataID)
+			d.SetFrom(f.f.From)
+			d.SetTo(f.f.To)
+			d.SetBlob(f.f.Info.Blob)
+			return nil
+		},
+	).Struct()
 
 	log.WithFields(log.Fields{
-		"DataID":   f.DataId,
-		"To":       f.To,
-		"Wrote":    written,
+		"DataID":   f.f.Info.DataID,
+		"To":       f.f.To,
 		"Priority": prio,
 	}).Info("sent")
 }

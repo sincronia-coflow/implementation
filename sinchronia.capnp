@@ -1,9 +1,13 @@
 @0xe064a1d4489394b5;
 
+using Go = import "/go.capnp";
+$Go.package("scheduler");
+$Go.import("github.com/akshayknarayan/sinchronia/client/scheduler");
+
 # a Scheduler schedules coflows.
 interface Scheduler {
     # A piece of data to send.
-    struct Data {
+    struct SchInfo {
         dataID @0 :UInt32;
         size @1 :UInt32; # during registration, if size is unknown, = 0.
     }
@@ -14,7 +18,7 @@ interface Scheduler {
     struct Flow {
         from @0 :UInt32;
         to @1 :UInt32;
-        data @2 :Data; 
+        data @2 :SchInfo; 
     }
 
     # A coflow
@@ -29,7 +33,7 @@ interface Scheduler {
     struct CoflowSlice {
         nodeID @0 :UInt32;
         jobID @1 :UInt32;
-        sending @2 :List(Data);
+        sending @2 :List(SchInfo);
     }
 
     # Return scheduled coflow to node.
@@ -39,7 +43,7 @@ interface Scheduler {
     struct Scheduled {
         jobID @0 :UInt32;
         priority @1 :UInt32;
-        receiving @2 :List(Data);
+        receiving @2 :List(SchInfo);
     }
 
     # A coflow's schedule.
@@ -49,4 +53,18 @@ interface Scheduler {
             noSchedule @1 :Void; # if that port has no scheduled coflows currently
         }
     }
+}
+
+# a Receiver receives Data
+interface Receiver {
+    # The data to send
+    struct SndInfo {
+        jobID @0 :UInt32;
+        dataID @3 :UInt32;
+        from @1 :UInt32;
+        to @2 :UInt32;
+        blob @4 :Data;
+    }
+
+    send @0 (data :SndInfo)  -> ();
 }
