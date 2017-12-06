@@ -30,6 +30,41 @@ public:
             std::endl;
     };
 
+    void dumpCoflow(struct coflow *cf) {
+        std::cout 
+            << "{coflow " << std::endl
+            << "pending: [";
+        for (auto it = cf->pending_flows->begin(); it != cf->pending_flows->end(); it++) {
+            std::cout 
+                << "(dataId: " << it->first 
+                << ", flow: <" << it->second.from << ", " << it->second.to << ", " << it->second.info.data_id << ">" 
+                << "), ";
+        }
+
+        std::cout << " ]\nready: [";
+        for (auto it = cf->ready_flows->begin(); it != cf->ready_flows->end(); it++) {
+            std::cout 
+                << "(dataId: " << it->first 
+                << ", flow: <" << it->second.from << ", " << it->second.to << ", " << it->second.info.data_id << ">" 
+                << "), ";
+        }
+        std::cout << " ]\n}" << std::endl;
+    }
+
+    void dumpState() {
+        std::cout << "[registered coflows]" << std::endl;
+        for (auto it = this->registered->begin(); it != this->registered->end(); it++) {
+            std::cout << "jobId: " << it->first << std::endl;
+            dumpCoflow(it->second);
+        }
+
+        std::cout << "[ready coflows] " << std::endl;
+        for (auto it = this->ready->begin(); it != this->ready->end(); it++) {
+            std::cout << "jobId: " << it->first << std::endl;
+            dumpCoflow(it->second);
+        }
+    };
+
     // Initial coflow registration
     kj::Promise<void> regCoflow(RegCoflowContext context) {
         auto cfs = context.getParams().getCoflows(); // capnp::List<struct Coflow>::Reader
@@ -50,15 +85,20 @@ public:
                 fs->insert(std::pair<uint32_t, flow>(f.info.data_id, f));
             }
 
+            auto waitPair = kj::heap(kj::newPromiseAndFulfiller<uint32_t>());
             auto cf = new coflow{
                 .job_id = it->getJobID(),
                 .pending_flows = fs,
                 .ready_flows =  new std::map<uint32_t, flow>(),
-                .uponScheduled = kj::newPromiseAndFulfiller<void>(), // for when the coflow has been scheduled
+                .scheduled = kj::mv(waitPair->fulfiller),
+                .uponScheduled = waitPair->promise.fork(), // for when the coflow has been scheduled
             };
 
             this->registered->insert(std::pair<uint32_t, coflow*>(cf->job_id, cf));
         }
+        
+        std::cout << "\nregCoflow()" << std::endl;
+        dumpState();
 
         return kj::READY_NOW;
     };
@@ -72,7 +112,7 @@ public:
         auto cf_pair = this->registered->find(job_id);
         if (cf_pair == this->registered->end()) {
             // unknown coflow?
-            std::cerr << "Unknown coflow" << job_id << std::endl;
+            std::cerr << "Unknown coflow " << job_id << std::endl;
             return kj::READY_NOW;
         }
 
@@ -122,6 +162,10 @@ public:
             this->registered->erase(cf_pair);
         }
 
+        std::cout << "\nsendCoflow(job_id " << job_id << ")\n";
+        dumpState();
+
+        std::cout << std::endl;
         return kj::READY_NOW;
     };
 
@@ -133,21 +177,22 @@ public:
        
         // look up against registered coflows
         auto cf_pair = this->ready->find(job_id);
-        KJ_ASSERT(cf_pair == this->ready->end());
+        KJ_ASSERT(cf_pair != this->ready->end());
 
         auto cf = cf_pair->second;
+        std::cout 
+            << "[getSchedule] node_id: " << node_id 
+            << ", job_id: " << job_id 
+            << ", promise: " << cf->scheduled->isWaiting()
+            << std::endl;
+
         // wait for this coflow to get scheduled.
-        return cf->uponScheduled.promise.then([this, job_id, node_id, cf, &context]() -> void {
+        return cf->uponScheduled
+            .addBranch()
+            .then([this, KJ_CPCAP(job_id), KJ_CPCAP(node_id), KJ_CPCAP(cf), KJ_CPCAP(context)](uint32_t prio) mutable {
             // Given the schedule, respond to the node
             // with a priority and which flows it needs to receive
-            uint32_t priority = 0;
-            for (auto it = this->schedule->begin(); it != this->schedule->end(); it++) {
-                priority++;
-                coflow *curr_cf = *it;
-                if (curr_cf->job_id == job_id) {
-                    break;
-                }
-            }
+            uint32_t priority = prio;
 
             std::vector<data> ret;
             for (auto it = cf->ready_flows->begin(); it != cf->ready_flows->end(); it++) {
@@ -162,6 +207,8 @@ public:
             auto sched = cfsched.initSchedule();
             sched.setJobID(job_id);
             sched.setPriority(priority);
+            
+            std::cout << "[getSchedule_promise] job_id: " << job_id << ", priority: " << priority << std::endl;
             auto rec = sched.initReceiving(ret.size());
             size_t i = 0;
             for (auto it = rec.begin(); it != rec.end(); it++) {

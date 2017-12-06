@@ -47,24 +47,24 @@ public:
         // if the scheduling promise is not yet fulfilled, fulfill it
         for (auto it = this->schedule->begin(); it != this->schedule->end(); it++) {
             coflow *curr_cf = *it;
-            if ((curr_cf->uponScheduled).fulfiller->isWaiting()) {
-                (curr_cf->uponScheduled).fulfiller->fulfill();
+            std::cout << "[scheduler] fulfilling cf: " << curr_cf->job_id << std::endl;
+            if (curr_cf->scheduled->isWaiting()) {
+                curr_cf->scheduled->fulfill(0); // TODO fill in the priority
             }
         }
     };
 
     void start_scheduler_timer() {
         kj::Duration dur = this->cf_sch->time_to_schedule();
+        std::cout << "[scheduler] waiting\n";
         this->tasks.add(this->ioContext.provider->getTimer().afterDelay(dur).then([this]() {
             this->start_scheduler_timer();
+            std::cout << "[scheduler] scheduling NOW\n";
             this->do_schedule();
         }));
     };
 
     void start_rpc_handler() {
-        std::cout << "init\n";
-
-        std::cout << "init impl...";
         capnp::Capability::Client impl = kj::heap<SchedulerImpl>(
             this->registered, 
             this->ready, 
@@ -72,19 +72,16 @@ public:
         ); 
 
         capnp::TwoPartyServer server(impl);
-        std::cout << "done\n";
 
-        std::cout << "init server...";
         auto& waitScope = this->ioContext.waitScope;
         auto addr = this->ioContext.provider->getNetwork().parseAddress("*", 16424).wait(waitScope);
         auto listener = addr->listen();
-        std::cout << "done\n";
 
         auto port = listener->getPort();
-        std::cout << "listening on port " << port << std::endl;
+        std::cout << "[rpc] listening on port " << port << std::endl;
 
-        std::cout << "waiting...\n";
         start_scheduler_timer();
+        std::cout << "[rpc] waiting...\n";
         this->tasks.add(server.listen(*listener));
 
         kj::NEVER_DONE.wait(waitScope);

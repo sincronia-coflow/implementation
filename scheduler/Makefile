@@ -1,10 +1,10 @@
 all: scheduler
 
 scheduler: sinchronia.capnp.h main.cpp
-	g++ -o sinchronia-scheduler -std=c++14 sinchronia.capnp.c++ main.cpp -lcapnp -lcapnp-rpc -lkj -lkj-async 
+	g++ -o sinchronia-scheduler -std=c++14 sinchronia.capnp.c++ main.cpp -lcapnp -lcapnp-rpc -lkj -lkj-async -g -gdwarf-2
 
 sinchronia.capnp.h:
-	capnp compile -oc++ ../sinchronia.capnp
+	capnp compile -I${GOPATH}/src/zombiezen.com/go/capnproto2/std -oc++ ../sinchronia.capnp
 	mv ../sinchronia.capnp.h ./
 	mv ../sinchronia.capnp.c++ ./
 

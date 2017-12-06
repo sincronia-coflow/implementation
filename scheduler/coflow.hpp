@@ -22,7 +22,8 @@ struct coflow {
     uint32_t job_id;
     std::map<uint32_t, flow> *pending_flows;
     std::map<uint32_t, flow> *ready_flows;
-    kj::PromiseFulfillerPair<void> uponScheduled;
+    kj::Own<kj::PromiseFulfiller<uint32_t>> scheduled;
+    kj::ForkedPromise<uint32_t> uponScheduled;
 };
 
 #endif

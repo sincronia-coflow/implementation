@@ -26,16 +26,13 @@ public:
 
     // The dummy scheduler runs every 5 seconds
     virtual kj::Duration time_to_schedule() {
-        std::cout
-            << "DummyScheduler "
-            << "waiting 5 seconds\n";
         return 5 * kj::SECONDS;
     };
 
     // The dummy scheduler picks an arbitrary order - the one it was handed.
     virtual void schedule(std::vector<coflow*> *to_schedule) {
         std::cout
-            << "DummyScheduler "
+            << "[scheduler] DummyScheduler "
             << "not scheduling " << to_schedule->size() << " coflows\n";
         return;
     };

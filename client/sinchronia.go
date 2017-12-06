@@ -21,9 +21,10 @@ type Data struct {
 
 // Flow is the transfer of a Data
 type Flow struct {
-	From uint32
-	To   uint32
-	Info Data
+	JobID uint32
+	From  uint32
+	To    uint32
+	Info  Data
 }
 
 // Coflow is a full view of a coflow, for registration
@@ -34,12 +35,13 @@ type Coflow struct {
 
 // CoflowSlice is a client's view of a coflow
 type coflowSlice struct {
-	jobID  uint32
-	nodeID uint32
-	send   []sendFlow
-	recv   []Data
-	prio   uint8
-	done   chan Flow // return received Data to SendCoflow caller over this channel
+	jobID    uint32
+	nodeID   uint32
+	send     []sendFlow
+	recv     []Data
+	prio     uint8
+	incoming chan Flow
+	ret      chan Data // return received Data to SendCoflow caller over this channel
 }
 
 // Sinchronia manages interactions with the coflow scheduler
@@ -50,6 +52,22 @@ type Sinchronia struct {
 	schedClient scheduler.Scheduler
 	ctx         context.Context
 	nodeMap     map[uint32]string
+	recv        chan Flow
+	newCoflow   chan coflowSlice
+}
+
+// distribute incoming flows across all coflows to the correct coflowSlice
+func getIncoming(newCoflow chan coflowSlice, recv chan Flow) {
+	coflows := make(map[uint32]coflowSlice)
+	for {
+		select {
+		case cf := <-newCoflow:
+			coflows[cf.jobID] = cf
+		case f := <-recv:
+			cf := coflows[f.JobID]
+			go func(c coflowSlice) { c.incoming <- f }(cf)
+		}
+	}
 }
 
 // New returns a Sinchronia agent connected to the central scheduler
@@ -62,6 +80,11 @@ func New(schedAddr string, nodeID uint32, nodes map[uint32]string) (*Sinchronia,
 		return nil, fmt.Errorf("couldn't connect to coflow scheduler: %s", err)
 	}
 
+	err = conn.(*net.TCPConn).SetKeepAlive(true)
+	if err != nil {
+		return nil, fmt.Errorf("couldn't set KeepAlive on connection: %s", err)
+	}
+
 	ctx := context.Background()
 	rpcConn := rpc.NewConn(rpc.StreamTransport(conn))
 	sch := scheduler.Scheduler{Client: rpcConn.Bootstrap(ctx)}
@@ -71,7 +94,12 @@ func New(schedAddr string, nodeID uint32, nodes map[uint32]string) (*Sinchronia,
 		schedClient: sch,
 		ctx:         ctx,
 		nodeMap:     nodes,
+		recv:        make(chan Flow),
+		newCoflow:   make(chan coflowSlice),
 	}
+
+	go getIncoming(s.newCoflow, s.recv)
+	go listen(s.NodeID, s.nodeMap[s.NodeID], s.recv)
 
 	return s, nil
 }
@@ -117,7 +145,7 @@ func (s *Sinchronia) RegCoflow(cfs []Coflow) {
 
 			return nil
 		},
-	)
+	).Struct()
 }
 
 // SendCoflow tells sinchronia to send the CoflowSlice.
@@ -126,70 +154,81 @@ func (s *Sinchronia) RegCoflow(cfs []Coflow) {
 // the flow is automatically sent over the network.
 //
 // Returns a channel on which incoming flows are returned
-func (s *Sinchronia) SendCoflow(jobID uint32, flows []Flow) (chan Flow, error) {
-	s.schedClient.SendCoflow(
-		s.ctx,
-		func(
-			p scheduler.Scheduler_sendCoflow_Params,
-		) error {
-			cs, err := p.NewCoflowSlice()
-			if err != nil {
-				log.WithFields(log.Fields{
-					"jobId": jobID,
-					"where": "sendCoflow",
-				}).Error(err)
-				return err
-			}
-
-			cs.SetJobID(jobID)
-			cs.SetNodeID(s.NodeID)
-			sfs, err := cs.NewSending(int32(len(flows)))
-			if err != nil {
-				log.WithFields(log.Fields{
-					"jobId": jobID,
-					"where": "sendCoflow",
-				}).Error(err)
-				return err
-			}
-
-			for i, f := range flows {
-				d := sfs.At(i)
-				d.SetDataID(f.Info.DataID)
-				d.SetSize(f.Info.Size)
-			}
-			return nil
-		},
-	)
-
-	// make a channel for each flow
-	// and have it wait to send
+func (s *Sinchronia) SendCoflow(
+	jobID uint32,
+	flows []Flow,
+) (chan Data, error) {
 	sendFlows := make([]sendFlow, 0, len(flows))
-	for _, fl := range flows {
-		sf := sendFlow{
-			f:       fl,
-			sendNow: make(chan uint8),
-		}
+	if len(flows) > 0 {
+		s.schedClient.SendCoflow(
+			s.ctx,
+			func(
+				p scheduler.Scheduler_sendCoflow_Params,
+			) error {
+				cs, err := p.NewCoflowSlice()
+				if err != nil {
+					log.WithFields(log.Fields{
+						"jobId": jobID,
+						"where": "sendCoflow",
+					}).Error(err)
+					return err
+				}
 
-		sendFlows = append(sendFlows, sf)
-		go sf.send(s.ctx, jobID, s.nodeMap)
+				cs.SetJobID(jobID)
+				cs.SetNodeID(s.NodeID)
+				sfs, err := cs.NewSending(int32(len(flows)))
+				if err != nil {
+					log.WithFields(log.Fields{
+						"jobId": jobID,
+						"where": "sendCoflow",
+					}).Error(err)
+					return err
+				}
+
+				for i, f := range flows {
+					d := sfs.At(i)
+					d.SetDataID(f.Info.DataID)
+					d.SetSize(f.Info.Size)
+				}
+				return nil
+			},
+		).Struct()
+
+		for _, fl := range flows {
+			// make a channel for each flow
+			sf := sendFlow{
+				f:       fl,
+				sendNow: make(chan uint8),
+				done:    make(chan interface{}),
+			}
+
+			// and have it wait to send
+			sendFlows = append(sendFlows, sf)
+			go sf.send(s.ctx, jobID, s.nodeMap)
+		}
 	}
 
 	cf := coflowSlice{
-		jobID:  jobID,
-		nodeID: s.NodeID,
-		send:   sendFlows,
-		recv:   []Data{}, // unused in send phase
-		prio:   0,        // unused in send phase
-		done:   make(chan Flow, 10),
+		jobID:    jobID,
+		nodeID:   s.NodeID,
+		send:     sendFlows,
+		incoming: make(chan Flow, 10),
+		ret:      make(chan Data, 10),
 	}
 
-	go listen(jobID, s.NodeID, 17000, cf.done)
+	s.newCoflow <- cf
 	go s.sendCoflow(cf)
-	return cf.done, nil
+
+	return cf.ret, nil
 }
 
 func (s *Sinchronia) sendCoflow(cf coflowSlice) {
 	// wait for coflow schedule on this node
+getSched:
+	log.WithFields(log.Fields{
+		"node": s.NodeID,
+		"job":  cf.jobID,
+	}).Info("calling GetSchedule")
 	scheduleRes, err := s.schedClient.GetSchedule(
 		s.ctx,
 		func(
@@ -206,8 +245,8 @@ func (s *Sinchronia) sendCoflow(cf coflowSlice) {
 			"node_id": s.NodeID,
 			"job_id":  cf.jobID,
 			"where":   "getSchedule - rpc",
-		}).Error(err)
-		return
+		}).Warn(err)
+		goto getSched
 	}
 
 	if res := scheduleRes.Which(); res == scheduler.Scheduler_CoflowSchedule_Which_noSchedule {
@@ -239,32 +278,89 @@ func (s *Sinchronia) sendCoflow(cf coflowSlice) {
 		return
 	}
 
-	cf.prio = uint8(schedule.Priority())
+	// expect the receipt of the appropriate data
+	recvs, err := schedule.Receiving()
+	if err != nil {
+		log.WithFields(log.Fields{
+			"node_id": s.NodeID,
+			"job_id":  cf.jobID,
+			"where":   "getSchedule - read receiving",
+		}).Error(err)
+		return
+	}
 
-	// TODO check this list of received against actually received
-	//recvs, err := schedule.Receiving()
-	//if err != nil {
-	//	log.WithFields(log.Fields{
-	//		"node_id": s.NodeID,
-	//		"job_id":  cf.jobID,
-	//		"where":   "getSchedule - read receiving",
-	//	}).Error(err)
-	//	return
-	//}
-	//
-	//cf.recv = make([]Data, 0, recvs.Len())
-	//for i, r := range recvs {
-	//	f := Data{
-	//		DataID: r.DataID(),
-	//		Size:   r.Size(),
-	//		Blob:   make([]byte, r.Size()),
-	//	}
-	//
-	//	cf.recv = append(cf.recv, f)
-	//}
+	toRecv := make([]Data, 0, recvs.Len())
+	for i := 0; i < recvs.Len(); i++ {
+		r := recvs.At(i)
+		d := Data{
+			DataID: r.DataID(),
+			Size:   r.Size(),
+		}
+
+		toRecv = append(toRecv, d)
+	}
+
+	go cf.recvExpected(s.NodeID, toRecv)
 
 	// and signal outgoing flows to send with appropriate priority
 	for _, f := range cf.send {
-		f.sendNow <- cf.prio
+		f.sendNow <- uint8(schedule.Priority())
 	}
+
+	for _, f := range cf.send {
+		<-f.done
+	}
+}
+
+func (cf coflowSlice) recvExpected(node uint32, recv []Data) {
+	if len(recv) == 0 {
+		// no data to receive
+		log.WithFields(log.Fields{
+			"node_id": node,
+			"job_id":  cf.jobID,
+			"where":   "recvExpected",
+		}).Info("no expected incoming data")
+		close(cf.ret)
+		return
+	}
+
+	toRecv := make(map[uint32]Data) // dataID -> Data
+	for _, d := range recv {
+		toRecv[d.DataID] = d
+	}
+
+	log.WithFields(log.Fields{
+		"node_id": node,
+		"job_id":  cf.jobID,
+		"where":   "recvExpected",
+		"toRecv":  toRecv,
+	}).Info("expecting incoming data")
+
+	for f := range cf.incoming {
+		if d, ok := toRecv[f.Info.DataID]; ok {
+			d.Blob = f.Info.Blob[:]
+			cf.ret <- d
+			log.WithFields(log.Fields{
+				"node_id": node,
+				"job_id":  cf.jobID,
+				"data_id": d.DataID,
+				"from":    f.From,
+				"where":   "recvExpected",
+			}).Info("returning received data to caller")
+			delete(toRecv, d.DataID)
+			if len(toRecv) == 0 {
+				break
+			}
+		} else {
+			log.WithFields(log.Fields{
+				"node_id": node,
+				"job_id":  cf.jobID,
+				"data_id": d.DataID,
+				"from":    f.From,
+				"where":   "recvExpected",
+			}).Warn("received unexpected flow")
+		}
+	}
+
+	close(cf.ret)
 }

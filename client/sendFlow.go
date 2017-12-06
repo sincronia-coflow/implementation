@@ -14,6 +14,7 @@ import (
 type sendFlow struct {
 	f       Flow
 	sendNow chan uint8 // get priority to send with
+	done    chan interface{}
 }
 
 /*
@@ -123,4 +124,6 @@ func (f sendFlow) send(ctx context.Context, job uint32, nodeMap map[uint32]strin
 		"To":       f.f.To,
 		"Priority": prio,
 	}).Info("sent")
+
+	f.done <- struct{}{}
 }
