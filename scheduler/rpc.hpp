@@ -22,9 +22,8 @@ class SchedulerImpl final : public Scheduler::Server {
 public:
     SchedulerImpl(
         std::map<uint32_t, coflow*> *reg, 
-        std::map<uint32_t, coflow*> *rdy, 
-        std::vector<coflow*> *schd 
-    ) : registered(reg), ready(rdy), schedule(schd) {
+        std::map<uint32_t, coflow*> *rdy 
+    ) : registered(reg), ready(rdy) {
         std::cout <<
             "init SchedulerImpl" <<
             std::endl;
@@ -247,7 +246,6 @@ public:
 private:
     std::map<uint32_t, coflow*> *registered;
     std::map<uint32_t, coflow*> *ready;
-    std::vector<coflow*> *schedule;
 };
         
 #endif

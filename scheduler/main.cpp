@@ -67,8 +67,7 @@ public:
     void start_rpc_handler() {
         capnp::Capability::Client impl = kj::heap<SchedulerImpl>(
             this->registered, 
-            this->ready, 
-            this->schedule
+            this->ready
         ); 
 
         capnp::TwoPartyServer server(impl);
