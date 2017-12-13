@@ -300,7 +300,13 @@ getSched:
 		toRecv = append(toRecv, d)
 	}
 
-	go cf.recvExpected(s.NodeID, toRecv)
+	log.WithFields(log.Fields{
+		"node_id": s.NodeID,
+		"job_id":  cf.jobID,
+		"to_recv": toRecv,
+	}).Info("got schedule")
+
+	go cf.recvExpected(s, toRecv)
 
 	// and signal outgoing flows to send with appropriate priority
 	for _, f := range cf.send {
@@ -312,7 +318,8 @@ getSched:
 	}
 }
 
-func (cf coflowSlice) recvExpected(node uint32, recv []Data) {
+func (cf coflowSlice) recvExpected(s *Sinchronia, recv []Data) {
+	node := s.NodeID
 	if len(recv) == 0 {
 		// no data to receive
 		log.WithFields(log.Fields{
@@ -361,6 +368,32 @@ func (cf coflowSlice) recvExpected(node uint32, recv []Data) {
 			}).Warn("received unexpected flow")
 		}
 	}
+
+	log.WithFields(log.Fields{
+		"node_id": node,
+		"job_id":  cf.jobID,
+		"recvd":   recv,
+	}).Info("coflow slice done receiving")
+	s.schedClient.CoflowDone(
+		s.ctx,
+		func(
+			p scheduler.Scheduler_coflowDone_Params,
+		) error {
+			p.SetJobId(cf.jobID)
+			p.SetNodeId(node)
+
+			fin, err := p.NewFinished(int32(len(recv)))
+			if err != nil {
+				return err
+			}
+
+			for i, d := range recv {
+				fin.Set(i, d.DataID)
+			}
+
+			return nil
+		},
+	).Struct()
 
 	close(cf.ret)
 }

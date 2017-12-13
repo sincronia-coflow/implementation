@@ -217,7 +217,6 @@ func client(
 
 	for _ = range cfs {
 		<-cfsDone
-		log.Info("cfsDone")
 	}
 
 	log.WithFields(log.Fields{

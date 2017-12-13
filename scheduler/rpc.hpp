@@ -214,8 +214,34 @@ public:
             for (auto it = rec.begin(); it != rec.end(); it++) {
                 it->setDataID(ret[i].data_id);
                 it->setSize(ret[i].size);
+                i++;
             }
         });
+    };
+
+    kj::Promise<void> coflowDone(CoflowDoneContext context) {
+        auto job_id = context.getParams().getJobId();
+        auto node_id = context.getParams().getNodeId();
+        auto finished = context.getParams().getFinished();
+       
+        // look up against registered coflows
+        auto cf_pair = this->ready->find(job_id);
+        KJ_ASSERT(cf_pair != this->ready->end());
+
+        auto cf = cf_pair->second;
+        for (auto it = finished.begin(); it != finished.end(); it++) {
+            auto f_pair = cf->ready_flows->find(*it);
+            KJ_ASSERT(f_pair != cf->ready_flows->end());
+            KJ_ASSERT(f_pair->second.to == node_id);
+            cf->ready_flows->erase(f_pair);
+        }
+
+        if (cf->ready_flows->empty()) {
+            // the coflow is done.
+            this->ready->erase(cf_pair);
+        }
+
+        return kj::READY_NOW;
     };
 
 private:

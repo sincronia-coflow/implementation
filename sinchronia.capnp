@@ -53,6 +53,8 @@ interface Scheduler {
             noSchedule @1 :Void; # if that port has no scheduled coflows currently
         }
     }
+
+    coflowDone @3 ( jobId :UInt32, nodeId :UInt32, finished :List(UInt32) ) -> ();
 }
 
 # a Receiver receives Data
