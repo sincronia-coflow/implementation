@@ -4,6 +4,7 @@
 #include <iostream>
 #include <map>
 #include <vector>
+#include <time.h>
 
 #include "sinchronia.capnp.h"
 #include <capnp/ez-rpc.h>
@@ -85,8 +86,10 @@ public:
             }
 
             auto waitPair = kj::heap(kj::newPromiseAndFulfiller<uint32_t>());
+            time_t now = time(NULL);
             auto cf = new coflow{
                 .job_id = it->getJobID(),
+                .start = now,
                 .pending_flows = fs,
                 .ready_flows =  new std::map<uint32_t, flow>(),
                 .scheduled = kj::mv(waitPair->fulfiller),
@@ -157,6 +160,8 @@ public:
         }
 
         if (cf->pending_flows->empty()) {
+            time_t now = time(NULL);
+            cf->start = now;
             this->ready->insert(std::pair<uint32_t, coflow*>(job_id, cf));
             this->registered->erase(cf_pair);
         }
@@ -237,6 +242,13 @@ public:
 
         if (cf->ready_flows->empty()) {
             // the coflow is done.
+            time_t now = time(NULL);
+            auto elapsed = difftime(now, cf->start);
+            std::cout 
+                << "[coflowDone] "
+                << "job_id: " << job_id << " "
+                << "elapased: " << elapsed << " "
+                << std::endl;
             this->ready->erase(cf_pair);
         }
 
