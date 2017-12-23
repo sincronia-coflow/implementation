@@ -8,10 +8,31 @@
 
 #include "sinchronia.capnp.h"
 #include <capnp/ez-rpc.h>
+#include <kj/async.h>
+#include <kj/async-io.h>
+#include <kj/memory.h>
 #include <kj/debug.h>
 
 #include "coflow.hpp"
 #include "scheduler.hpp"
+
+class RpcHandler final : kj::TaskSet::ErrorHandler {
+public:
+    RpcHandler(CoflowScheduler *sch);
+
+    void taskFailed(kj::Exception &&exception) override;
+    void do_schedule();
+    void start_scheduler_timer();
+    void start_rpc_handler();
+
+    kj::AsyncIoContext ioContext;
+    kj::TaskSet tasks;
+
+    std::map<uint32_t, coflow*> *registered;
+    std::map<uint32_t, coflow*> *ready;
+    std::vector<coflow*> *schedule;
+    CoflowScheduler *cf_sch;
+};
 
 struct coflowSchedule {
     uint32_t job_id;
@@ -21,13 +42,10 @@ struct coflowSchedule {
 
 class SchedulerImpl final : public Scheduler::Server {
 public:
-    SchedulerImpl(
-        std::map<uint32_t, coflow*> *reg, 
-        std::map<uint32_t, coflow*> *rdy 
-    ) : registered(reg), ready(rdy) {
-        std::cout <<
-            "init SchedulerImpl" <<
-            std::endl;
+    SchedulerImpl(RpcHandler *rpc) : registered(rpc->registered), ready(rpc->ready), rpch(rpc) {
+        std::cout 
+            << "init SchedulerImpl" 
+            << std::endl;
     };
 
     void dumpCoflow(struct coflow *cf) {
@@ -258,6 +276,7 @@ public:
 private:
     std::map<uint32_t, coflow*> *registered;
     std::map<uint32_t, coflow*> *ready;
+    RpcHandler *rpch;
 };
         
 #endif

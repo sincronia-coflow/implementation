@@ -49,19 +49,31 @@ public:
 
 class DummyScheduler : public CoflowScheduler {
 public:
-    DummyScheduler() : CoflowScheduler() {};
+    coflowTimeUnit next_phase_time;
+    DummyScheduler() : CoflowScheduler() {
+        this->next_phase_time = this->current_time;
+    };
 
     // The dummy scheduler runs every 5 seconds
     virtual kj::Duration time_to_schedule() {
+        this->next_phase_time = this->current_time;
+        this->next_phase_time.timeStep += 5;
         return sinchronia_duration(5);
     };
 
     // The dummy scheduler picks an arbitrary order - the one it was handed.
     virtual void schedule(std::vector<coflow*> *to_schedule) {
         sinchronia_update_time(&current_time);
-        std::cout
-            << "[scheduler] DummyScheduler "
-            << "not scheduling " << to_schedule->size() << " coflows\n";
+        if (current_time.timeStep < next_phase_time.timeStep) {
+            std::cout
+                << "[scheduler] DummyScheduler, work conservation schedule: "
+                << "not scheduling " << to_schedule->size() << " coflows\n";
+        } else {
+            std::cout
+                << "[scheduler] DummyScheduler, phased schedule: "
+                << "not scheduling " << to_schedule->size() << " coflows\n";
+        }
+
         return;
     };
 };
