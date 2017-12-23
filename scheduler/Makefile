@@ -13,3 +13,4 @@ capnp: sinchronia.capnp.h
 clean:
 	rm -rf sinchronia.capnp.*
 	rm -rf sinchronia-scheduler
+	rm -rf *.dSYM

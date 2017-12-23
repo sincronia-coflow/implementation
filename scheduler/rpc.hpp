@@ -182,6 +182,8 @@ public:
             cf->wall_start = now;
             this->ready->insert(std::pair<uint32_t, coflow*>(job_id, cf));
             this->registered->erase(cf_pair);
+
+            this->rpch->do_schedule();
         }
 
         std::cout << "\nsendCoflow(job_id " << job_id << ")\n";
