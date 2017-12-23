@@ -5,7 +5,8 @@
 #include <map>
 #include <vector>
 #include <time.h>
-
+#include <fstream>
+#include <iostream>
 #include "sincronia.capnp.h"
 #include <capnp/ez-rpc.h>
 #include <kj/async.h>
@@ -13,8 +14,11 @@
 #include <kj/memory.h>
 #include <kj/debug.h>
 
-#include "coflow.hpp"
+#include "sinchronia-coflow.hpp"
 #include "scheduler.hpp"
+#include "common.h"
+//std::ofstream myfile;
+//    myfile.open ("coflow-done.txt");
 
 class RpcHandler final : kj::TaskSet::ErrorHandler {
 public:
@@ -43,13 +47,13 @@ struct coflowSchedule {
 class SchedulerImpl final : public Scheduler::Server {
 public:
     SchedulerImpl(RpcHandler *rpc) : registered(rpc->registered), ready(rpc->ready), rpch(rpc) {
-        std::cout 
-            << "init SchedulerImpl" 
+        std::cout
+            << "init SchedulerImpl"
             << std::endl;
     };
 
     void dumpCoflow(struct coflow *cf) {
-        std::cout 
+        std::cout
             << "{coflow " << std::endl
             << "pending: [";
         for (auto it = cf->pending_flows->begin(); it != cf->pending_flows->end(); it++) {
@@ -61,9 +65,9 @@ public:
 
         std::cout << " ]\nready: [";
         for (auto it = cf->ready_flows->begin(); it != cf->ready_flows->end(); it++) {
-            std::cout 
-                << "(dataId: " << it->first 
-                << ", flow: <" << it->second.from << " -> " << it->second.to << ": " << it->second.info.data_id << ">" 
+            std::cout
+                << "(dataId: " << it->first
+                << ", flow: <" << it->second.from << " -> " << it->second.to << ": " << it->second.info.data_id << ">"
                 << "), ";
         }
         std::cout << " ]\n}" << std::endl;
@@ -78,8 +82,8 @@ public:
 
         std::cout << "[ready coflows] " << std::endl;
         for (auto it = this->ready->begin(); it != this->ready->end(); it++) {
-            std::cout 
-                << "jobId: " << it->first 
+            std::cout
+                << "jobId: " << it->first
                 << ", priority: " << it->second->priority
                 << std::endl;
             dumpCoflow(it->second);
@@ -122,7 +126,7 @@ public:
             cf->bottleneck_size = get_bottleneck_size(cf);
             this->registered->insert(std::pair<uint32_t, coflow*>(cf->job_id, cf));
         }
-        
+
         std::cout << "\nregCoflow()" << std::endl;
         dumpState();
 
@@ -138,7 +142,7 @@ public:
         std::cout << "\nsendCoflow(job_id " << job_id << ")\n";
         dumpState();
         std::cout << std::endl;
-            
+
         // look up against registered coflows
         auto cf_pair = this->registered->find(job_id);
         if (cf_pair != this->registered->end()) {
@@ -159,9 +163,9 @@ public:
                 auto f_pair = cf->pending_flows->find(s.data_id);
                 if (f_pair == cf->pending_flows->end()) {
                     // unknown flow in coflow?
-                    std::cerr 
-                        << "Unknown flow " << s.data_id 
-                        << " in coflow " << job_id 
+                    std::cerr
+                        << "Unknown flow " << s.data_id
+                        << " in coflow " << job_id
                         << std::endl;
                     return kj::READY_NOW;
                 }
@@ -170,9 +174,9 @@ public:
 
                 if (f.from != node_id) {
                     // unknown flow in coflow?
-                    std::cerr 
-                        << "Inconsistent flow " << s.data_id 
-                        << " in coflow " << job_id 
+                    std::cerr
+                        << "Inconsistent flow " << s.data_id
+                        << " in coflow " << job_id
                         << ": sender " << node_id
                         << " != " << f.to
                         << std::endl;
@@ -210,7 +214,7 @@ public:
         return cf->uponReady
             .addBranch()
             .then([this, KJ_CPCAP(node_id), KJ_CPCAP(cf), KJ_CPCAP(context)]() mutable {
-        
+
              std::vector<data> ret;
              for (auto it = cf->ready_flows->begin(); it != cf->ready_flows->end(); it++) {
                  flow f = it->second;
@@ -249,18 +253,18 @@ public:
 
         if (cfs_at_node->empty()) {
             // no coflows for this node. Return empty list.
-            //std::cout 
+            //std::cout
             //    << "[getSchedule] "
-            //    << "node_id: " << node_id  
+            //    << "node_id: " << node_id
             //    << " no coflows"
             //    << std::endl;
             return kj::READY_NOW;
         }
-        
+
         //std::cout << "[getSchedule] node_id: " << node_id  << "[ ";
         //for (auto it = cfs_at_node->begin(); it != cfs_at_node->end(); it++) {
         //    std::cout
-        //        << "(cf: " << (*it)->job_id 
+        //        << "(cf: " << (*it)->job_id
         //        << ", prio: " << (*it)->priority << ") ";
         //}
         //std::cout << "]" << std::endl;
@@ -281,7 +285,7 @@ public:
         auto job_id = context.getParams().getJobId();
         auto node_id = context.getParams().getNodeId();
         auto finished = context.getParams().getFinished();
-       
+
         // look up against registered coflows
         auto cf_pair = this->ready->find(job_id);
         KJ_ASSERT(cf_pair != this->ready->end());
@@ -298,7 +302,12 @@ public:
             // the coflow is done.
             time_t now = time(NULL);
             auto elapsed = difftime(now, cf->wall_start);
-            std::cout 
+            std::cout
+                << "[coflowDone] "
+                << "job_id: " << job_id << " "
+                << "elapased: " << elapsed << " "
+                << std::endl;
+            myfile
                 << "[coflowDone] "
                 << "job_id: " << job_id << " "
                 << "elapased: " << elapsed << " "
@@ -314,5 +323,5 @@ private:
     std::map<uint32_t, coflow*> *ready;
     RpcHandler *rpch;
 };
-        
+
 #endif

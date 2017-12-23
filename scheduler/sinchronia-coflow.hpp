@@ -42,7 +42,7 @@ uint32_t get_bottleneck_size(struct coflow *cf) {
         } else {
             senders_it->second += f.info.size;
         }
-        
+
         auto receivers_it = receivers->find(f.to);
         if (receivers_it == receivers->end()) {
             receivers->insert(std::pair<uint32_t, uint32_t>(f.to, f.info.size));
@@ -57,7 +57,7 @@ uint32_t get_bottleneck_size(struct coflow *cf) {
             bottleneck_size = it->second;
         }
     }
-    
+
     for (auto it = receivers->begin(); it != receivers->end(); it++) {
         if (it->second > bottleneck_size) {
             bottleneck_size = it->second;
