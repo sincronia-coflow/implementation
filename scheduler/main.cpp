@@ -2,7 +2,8 @@
 #include <iostream>
 #include <vector>
 #include <map>
-
+#include <ctime>
+#include <algorithm>
 #include "sincronia.capnp.h"
 #include <algorithm>
 #include <capnp/rpc-twoparty.h>
@@ -13,9 +14,10 @@
 
 #include "scheduler.hpp"
 #include "rpc.hpp"
-
-RpcHandler::RpcHandler(CoflowScheduler *sch) : 
-    ioContext(kj::setupAsyncIo()), 
+std::ofstream myfile;
+  //  myfile.open ("coflow-done.txt");
+RpcHandler::RpcHandler(CoflowScheduler *sch) :
+    ioContext(kj::setupAsyncIo()),
     tasks(*this),
     registered(new std::map<uint32_t, coflow*>),
     ready(new std::map<uint32_t, coflow*>),
@@ -24,10 +26,10 @@ RpcHandler::RpcHandler(CoflowScheduler *sch) :
 {};
 
 void RpcHandler::taskFailed(kj::Exception &&exception) {
-    std::cerr << 
+    std::cerr <<
         "exception: " <<
         exception.getDescription().cStr() <<
-        std::endl; 
+        std::endl;
     kj::throwFatalException(kj::mv(exception));
 };
 
@@ -47,8 +49,8 @@ void RpcHandler::do_schedule() {
     for (auto it = this->schedule->begin(); it != this->schedule->end(); it++) {
         coflow *curr_cf = *it;
         curr_cf->priority = std::max(7-((int)prio),0);
-        std::cout 
-            << "[scheduler] fulfilling cf " 
+        std::cout
+            << "[scheduler] fulfilling cf "
             << curr_cf->job_id << ": "
             << curr_cf->priority
             << std::endl;
@@ -86,7 +88,10 @@ void RpcHandler::start_rpc_handler() {
 };
 
 int main(int argv, char **argc) {
-    CoflowScheduler *sch = new DummyScheduler();
+    myfile.open ("coflow-done.txt");    
+// CoflowScheduler *sch = new DummyScheduler();
+    std::cout << "Time of calling the scheduler: " << time(NULL) << '\n';
+    CoflowScheduler *sch = new OnlineScheduler();
     RpcHandler handler(sch);
     handler.start_rpc_handler();
     return 0;
