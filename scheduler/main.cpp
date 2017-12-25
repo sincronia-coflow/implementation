@@ -43,12 +43,16 @@ void RpcHandler::do_schedule() {
     this->cf_sch->schedule(this->schedule);
 
     // if the scheduling promise is not yet fulfilled, fulfill it
+    uint32_t prio = 0;
     for (auto it = this->schedule->begin(); it != this->schedule->end(); it++) {
         coflow *curr_cf = *it;
-        std::cout << "[scheduler] fulfilling cf: " << curr_cf->job_id << std::endl;
-        if (curr_cf->scheduled->isWaiting()) {
-            curr_cf->scheduled->fulfill(0); // TODO fill in the priority
-        }
+        curr_cf->priority = prio;
+        std::cout 
+            << "[scheduler] fulfilling cf " 
+            << curr_cf->job_id << ": "
+            << curr_cf->priority
+            << std::endl;
+        prio++;
     }
 };
 

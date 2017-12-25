@@ -12,9 +12,8 @@ import (
 )
 
 type sendFlow struct {
-	f       Flow
-	sendNow chan uint8 // get priority to send with
-	done    chan interface{}
+	f    Flow
+	done chan interface{}
 }
 
 /*
@@ -58,8 +57,12 @@ func diffServFromPriority(prio uint8) int {
 	panic("unreachable uint8")
 }
 
-func (f sendFlow) send(ctx context.Context, job uint32, nodeMap map[uint32]string) {
-	givenPrio := <-f.sendNow
+func (f sendFlow) send(
+	ctx context.Context,
+	job uint32,
+	givenPrio uint32,
+	nodeMap map[uint32]string,
+) {
 	prio := diffServFromPriority(uint8(givenPrio))
 
 	toAddr, ok := nodeMap[f.f.To]

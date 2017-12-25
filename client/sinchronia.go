@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"sort"
+	"time"
 
 	"./scheduler"
 
@@ -33,13 +35,21 @@ type Coflow struct {
 	Flows []Flow
 }
 
+type coflowScheduleItem struct {
+	jobID    uint32
+	priority uint32
+}
+
 // CoflowSlice is a client's view of a coflow
 type coflowSlice struct {
-	jobID    uint32
-	nodeID   uint32
-	send     []sendFlow
-	recv     []Data
-	prio     uint8
+	jobID  uint32
+	nodeID uint32
+	send   []sendFlow
+	recv   []Data
+
+	sendNow chan uint32      // send one flow, with the given priority
+	sent    chan interface{} // the one flow was sent
+
 	incoming chan Flow
 	ret      chan Data // return received Data to SendCoflow caller over this channel
 }
@@ -56,17 +66,111 @@ type Sinchronia struct {
 	newCoflow   chan coflowSlice
 }
 
-// distribute incoming flows across all coflows to the correct coflowSlice
-func getIncoming(newCoflow chan coflowSlice, recv chan Flow) {
+func (s *Sinchronia) getSchedule() ([]coflowScheduleItem, error) {
+	scheduleRes, err := s.schedClient.GetSchedule(
+		s.ctx,
+		func(
+			p scheduler.Scheduler_getSchedule_Params,
+		) error {
+			p.SetNodeId(s.NodeID)
+			return nil
+		},
+	).Struct()
+
+	if err != nil {
+		return nil, err
+	}
+
+	schRet, err := scheduleRes.Schedule()
+	if schRet.Len() == 0 {
+		return nil, fmt.Errorf("no scheduled coflows")
+	}
+
+	sch := make([]coflowScheduleItem, 0, schRet.Len())
+	for i := 0; i < schRet.Len(); i++ {
+		sch = append(sch, coflowScheduleItem{
+			jobID:    schRet.At(i).JobID(),
+			priority: schRet.At(i).Priority(),
+		})
+	}
+
+	sort.Slice(sch, func(i, j int) bool {
+		return sch[i].priority < sch[j].priority
+	})
+
+	return sch, nil
+}
+
+func after(ch chan interface{}) {
+	<-time.After(100 * time.Millisecond)
+	ch <- struct{}{}
+}
+
+// Main control loop
+// Sending Loop
+// 1. Poll the master for the CoflowSchedule
+// 2. Of all the local coflows, send the highest priority one
+//
+// Receiving
+// Distribute incoming flows across all coflows to the correct coflowSlice
+func (s *Sinchronia) start() {
+	var ok bool
+	var err error
 	coflows := make(map[uint32]coflowSlice)
+	var currSchedule []coflowScheduleItem
+
+	// initialize currCf to a dummy that triggers after 100ms
+	ch := make(chan interface{})
+	currCf := coflowSlice{sent: ch}
+	go after(ch)
+
 	for {
 		select {
-		case cf := <-newCoflow:
-			coflows[cf.jobID] = cf
-		case f := <-recv:
+		case f := <-s.recv:
 			cf := coflows[f.JobID]
 			go func(c coflowSlice) { c.incoming <- f }(cf)
+			continue
+		case cf := <-s.newCoflow:
+			coflows[cf.jobID] = cf
+			go s.sendCoflow(cf)
+		case <-currCf.sent:
 		}
+
+		// 1. Poll the master for the CoflowSchedule
+		currSchedule, err = s.getSchedule()
+		if err != nil {
+			log.WithFields(log.Fields{
+				"nodeID": s.NodeID,
+				"err":    err,
+			}).Warn("GetSchedule RPC")
+		}
+
+		if len(currSchedule) == 0 {
+			// no flows to send, so use a dummy coflowSlice for a timeout
+			currCf = coflowSlice{sent: ch}
+			go after(ch)
+			continue
+		}
+
+		// 2. Of all the local coflows, send the highest priority one
+		scheduled := currSchedule[0]
+		currSchedule = currSchedule[1:]
+		currCf, ok = coflows[scheduled.jobID]
+		if !ok {
+			// why does this coflow not exist !?
+			log.WithFields(log.Fields{
+				"nodeID":   s.NodeID,
+				"jobID":    scheduled.jobID,
+				"priority": scheduled.priority,
+				"coflows":  coflows,
+			}).Panic("scheduled coflow not found")
+		}
+
+		log.WithFields(log.Fields{
+			"nodeID": s.NodeID,
+			"currCf": currCf,
+		}).Info("sending")
+		currCf.sendNow <- scheduled.priority
 	}
 }
 
@@ -98,7 +202,7 @@ func New(schedAddr string, nodeID uint32, nodes map[uint32]string) (*Sinchronia,
 		newCoflow:   make(chan coflowSlice),
 	}
 
-	go getIncoming(s.newCoflow, s.recv)
+	go s.start()
 	go listen(s.NodeID, s.nodeMap[s.NodeID], s.recv)
 
 	return s, nil
@@ -153,247 +257,34 @@ func (s *Sinchronia) RegCoflow(cfs []Coflow) {
 // When the central scheduler returns a coflow priority,
 // the flow is automatically sent over the network.
 //
+// DO NOT start sending goroutines
+//
 // Returns a channel on which incoming flows are returned
 func (s *Sinchronia) SendCoflow(
 	jobID uint32,
 	flows []Flow,
 ) (chan Data, error) {
 	sendFlows := make([]sendFlow, 0, len(flows))
-	if len(flows) > 0 {
-		s.schedClient.SendCoflow(
-			s.ctx,
-			func(
-				p scheduler.Scheduler_sendCoflow_Params,
-			) error {
-				cs, err := p.NewCoflowSlice()
-				if err != nil {
-					log.WithFields(log.Fields{
-						"jobId": jobID,
-						"where": "sendCoflow",
-					}).Error(err)
-					return err
-				}
-
-				cs.SetJobID(jobID)
-				cs.SetNodeID(s.NodeID)
-				sfs, err := cs.NewSending(int32(len(flows)))
-				if err != nil {
-					log.WithFields(log.Fields{
-						"jobId": jobID,
-						"where": "sendCoflow",
-					}).Error(err)
-					return err
-				}
-
-				for i, f := range flows {
-					d := sfs.At(i)
-					d.SetDataID(f.Info.DataID)
-					d.SetSize(f.Info.Size)
-				}
-				return nil
-			},
-		).Struct()
-
-		for _, fl := range flows {
-			// make a channel for each flow
-			sf := sendFlow{
-				f:       fl,
-				sendNow: make(chan uint8),
-				done:    make(chan interface{}),
-			}
-
-			// and have it wait to send
-			sendFlows = append(sendFlows, sf)
-			go sf.send(s.ctx, jobID, s.nodeMap)
+	for _, fl := range flows {
+		// make a channel for each flow
+		sf := sendFlow{
+			f:    fl,
+			done: make(chan interface{}),
 		}
+
+		sendFlows = append(sendFlows, sf)
 	}
 
 	cf := coflowSlice{
 		jobID:    jobID,
 		nodeID:   s.NodeID,
 		send:     sendFlows,
+		sendNow:  make(chan uint32),
+		sent:     make(chan interface{}),
 		incoming: make(chan Flow, 10),
 		ret:      make(chan Data, 10),
 	}
 
 	s.newCoflow <- cf
-	go s.sendCoflow(cf)
-
 	return cf.ret, nil
-}
-
-func (s *Sinchronia) sendCoflow(cf coflowSlice) {
-	// wait for coflow schedule on this node
-getSched:
-	log.WithFields(log.Fields{
-		"node": s.NodeID,
-		"job":  cf.jobID,
-	}).Info("calling GetSchedule")
-	scheduleRes, err := s.schedClient.GetSchedule(
-		s.ctx,
-		func(
-			p scheduler.Scheduler_getSchedule_Params,
-		) error {
-			p.SetJobId(cf.jobID)
-			p.SetNodeId(s.NodeID)
-			return nil
-		},
-	).Schedule().Struct()
-
-	if err != nil {
-		log.WithFields(log.Fields{
-			"node_id": s.NodeID,
-			"job_id":  cf.jobID,
-			"where":   "getSchedule - rpc",
-		}).Warn(err)
-		goto getSched
-	}
-
-	if res := scheduleRes.Which(); res == scheduler.Scheduler_CoflowSchedule_Which_noSchedule {
-		log.WithFields(log.Fields{
-			"node_id": s.NodeID,
-			"job_id":  cf.jobID,
-			"where":   "getSchedule - parse",
-		}).Warn("no schedule returned")
-		return
-	}
-
-	schedule, err := scheduleRes.Schedule()
-	if err != nil {
-		log.WithFields(log.Fields{
-			"node_id": s.NodeID,
-			"job_id":  cf.jobID,
-			"where":   "getSchedule - read schedule",
-		}).Error(err)
-		return
-	}
-
-	if schedule.JobID() != cf.jobID {
-		log.WithFields(log.Fields{
-			"node_id":        s.NodeID,
-			"job_id":         cf.jobID,
-			"returned_jobid": schedule.JobID(),
-			"where":          "getSchedule - jobId",
-		}).Warn("returned job id does not match")
-		return
-	}
-
-	// expect the receipt of the appropriate data
-	recvs, err := schedule.Receiving()
-	if err != nil {
-		log.WithFields(log.Fields{
-			"node_id": s.NodeID,
-			"job_id":  cf.jobID,
-			"where":   "getSchedule - read receiving",
-		}).Error(err)
-		return
-	}
-
-	toRecv := make([]Data, 0, recvs.Len())
-	for i := 0; i < recvs.Len(); i++ {
-		r := recvs.At(i)
-		d := Data{
-			DataID: r.DataID(),
-			Size:   r.Size(),
-		}
-
-		toRecv = append(toRecv, d)
-	}
-
-	log.WithFields(log.Fields{
-		"node_id": s.NodeID,
-		"job_id":  cf.jobID,
-		"to_recv": toRecv,
-	}).Info("got schedule")
-
-	go cf.recvExpected(s, toRecv)
-
-	// and signal outgoing flows to send with appropriate priority
-	for _, f := range cf.send {
-		f.sendNow <- uint8(schedule.Priority())
-	}
-
-	for _, f := range cf.send {
-		<-f.done
-	}
-}
-
-func (cf coflowSlice) recvExpected(s *Sinchronia, recv []Data) {
-	node := s.NodeID
-	if len(recv) == 0 {
-		// no data to receive
-		log.WithFields(log.Fields{
-			"node_id": node,
-			"job_id":  cf.jobID,
-			"where":   "recvExpected",
-		}).Info("no expected incoming data")
-		close(cf.ret)
-		return
-	}
-
-	toRecv := make(map[uint32]Data) // dataID -> Data
-	for _, d := range recv {
-		toRecv[d.DataID] = d
-	}
-
-	log.WithFields(log.Fields{
-		"node_id": node,
-		"job_id":  cf.jobID,
-		"where":   "recvExpected",
-		"toRecv":  toRecv,
-	}).Info("expecting incoming data")
-
-	for f := range cf.incoming {
-		if d, ok := toRecv[f.Info.DataID]; ok {
-			d.Blob = f.Info.Blob[:]
-			cf.ret <- d
-			log.WithFields(log.Fields{
-				"node_id": node,
-				"job_id":  cf.jobID,
-				"data_id": d.DataID,
-				"from":    f.From,
-				"where":   "recvExpected",
-			}).Info("returning received data to caller")
-			delete(toRecv, d.DataID)
-			if len(toRecv) == 0 {
-				break
-			}
-		} else {
-			log.WithFields(log.Fields{
-				"node_id": node,
-				"job_id":  cf.jobID,
-				"data_id": d.DataID,
-				"from":    f.From,
-				"where":   "recvExpected",
-			}).Warn("received unexpected flow")
-		}
-	}
-
-	log.WithFields(log.Fields{
-		"node_id": node,
-		"job_id":  cf.jobID,
-		"recvd":   recv,
-	}).Info("coflow slice done receiving")
-	s.schedClient.CoflowDone(
-		s.ctx,
-		func(
-			p scheduler.Scheduler_coflowDone_Params,
-		) error {
-			p.SetJobId(cf.jobID)
-			p.SetNodeId(node)
-
-			fin, err := p.NewFinished(int32(len(recv)))
-			if err != nil {
-				return err
-			}
-
-			for i, d := range recv {
-				fin.Set(i, d.DataID)
-			}
-
-			return nil
-		},
-	).Struct()
-
-	close(cf.ret)
 }

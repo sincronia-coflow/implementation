@@ -14,7 +14,7 @@ interface Scheduler {
 
     regCoflow @0 ( coflows :List(Coflow) ) -> ();
 
-    # A sender and recipient for a Data.
+    # A sender and recipient for a piece of data (SchInfo).
     struct Flow {
         from @0 :UInt32;
         to @1 :UInt32;
@@ -27,31 +27,16 @@ interface Scheduler {
         flows @1 :List(Flow);
     }
 
-    sendCoflow @1 ( coflowSlice :CoflowSlice ) -> ();
+    # sendCoflow is called once per coflow per node, when all its sending flows are ready.
+    # It returns once the coflow is ready to be sent.
+    sendCoflow @1 ( nodeID :UInt32, jobID :UInt32, sending :List(SchInfo) ) -> ( receiving :List(SchInfo) );
 
-    # One port's view of a single Coflow.
-    struct CoflowSlice {
-        nodeID @0 :UInt32;
-        jobID @1 :UInt32;
-        sending @2 :List(SchInfo);
-    }
+    # Return scheduled coflows for node.
+    getSchedule @2 ( nodeId :UInt32 ) -> ( schedule :List(CoflowSchedule) );
 
-    # Return scheduled coflow to node.
-    getSchedule @2 ( jobId :UInt32, nodeId :UInt32 ) -> (schedule :CoflowSchedule);
-
-
-    struct Scheduled {
+    struct CoflowSchedule {
         jobID @0 :UInt32;
         priority @1 :UInt32;
-        receiving @2 :List(SchInfo);
-    }
-
-    # A coflow's schedule.
-    struct CoflowSchedule {
-        union {
-            schedule @0   :Scheduled; # a scheduled coflow slice, with which data_id's to receive
-            noSchedule @1 :Void; # if that port has no scheduled coflows currently
-        }
     }
 
     coflowDone @3 ( jobId :UInt32, nodeId :UInt32, finished :List(UInt32) ) -> ();
