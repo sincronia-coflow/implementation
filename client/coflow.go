@@ -63,6 +63,11 @@ rpcReq:
 	// loop through sending each flow
 	for _, sf := range cf.send {
 		prio := <-cf.sendNow
+		log.WithFields(log.Fields{
+			"nodeID": s.NodeID,
+			"coflow": cf.jobID,
+			"flow":   sf,
+		}).Info("sending flow")
 		go sf.send(s.ctx, cf.jobID, prio, s.nodeMap)
 		<-sf.done
 		cf.sent <- struct{}{}
@@ -74,11 +79,6 @@ func (s *Sinchronia) recvExpected(cf coflowSlice, recv []Data) {
 	node := s.NodeID
 	if len(recv) == 0 {
 		// no data to receive
-		log.WithFields(log.Fields{
-			"node_id": node,
-			"job_id":  cf.jobID,
-			"where":   "recvExpected",
-		}).Info("no expected incoming data")
 		close(cf.ret)
 		return
 	}
@@ -105,7 +105,7 @@ func (s *Sinchronia) recvExpected(cf coflowSlice, recv []Data) {
 				"data_id": d.DataID,
 				"from":    f.From,
 				"where":   "recvExpected",
-			}).Info("returning received data to caller")
+			}).Info("returned received data to caller")
 			delete(toRecv, d.DataID)
 			if len(toRecv) == 0 {
 				break

@@ -83,7 +83,7 @@ func (s *Sinchronia) getSchedule() ([]coflowScheduleItem, error) {
 
 	schRet, err := scheduleRes.Schedule()
 	if schRet.Len() == 0 {
-		return nil, fmt.Errorf("no scheduled coflows")
+		return []coflowScheduleItem{}, nil
 	}
 
 	sch := make([]coflowScheduleItem, 0, schRet.Len())
@@ -122,7 +122,6 @@ func (s *Sinchronia) start() {
 	// initialize currCf to a dummy that triggers after 100ms
 	ch := make(chan interface{})
 	currCf := coflowSlice{sent: ch}
-	go after(ch)
 
 	for {
 		select {
@@ -133,6 +132,9 @@ func (s *Sinchronia) start() {
 		case cf := <-s.newCoflow:
 			coflows[cf.jobID] = cf
 			go s.sendCoflow(cf)
+			if len(cf.send) == 0 {
+				continue
+			}
 		case <-currCf.sent:
 		}
 
@@ -169,7 +171,7 @@ func (s *Sinchronia) start() {
 		log.WithFields(log.Fields{
 			"nodeID": s.NodeID,
 			"currCf": currCf,
-		}).Info("sending")
+		}).Info("sending coflow")
 		currCf.sendNow <- scheduled.priority
 	}
 }

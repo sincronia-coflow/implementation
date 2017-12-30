@@ -31,6 +31,7 @@ func TestSinchronia(t *testing.T) {
 	<-ready
 	<-time.After(time.Millisecond)
 	appMaster("127.0.0.1:16424")
+	done <- struct{}{}
 }
 
 func runScheduler(

@@ -15,6 +15,7 @@ struct coflowTimeUnit{
     uint32_t timeStep;
 }; // wall clock seconds since epoch start
 
+// TODO a Phase contains scheduling Epochs
 struct coflowTimeUnit sinchronia_epoch_reset() {
     return {
         .epoch_start = time(NULL),
@@ -67,11 +68,11 @@ public:
         if (current_time.timeStep < next_phase_time.timeStep) {
             std::cout
                 << "[scheduler] DummyScheduler, work conservation schedule: "
-                << "not scheduling " << to_schedule->size() << " coflows\n";
+                << "scheduling " << to_schedule->size() << " coflows\n";
         } else {
             std::cout
                 << "[scheduler] DummyScheduler, phased schedule: "
-                << "not scheduling " << to_schedule->size() << " coflows\n";
+                << "scheduling " << to_schedule->size() << " coflows\n";
         }
 
         return;
