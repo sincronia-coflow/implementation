@@ -176,12 +176,6 @@ func client(
 
 	cfsDone := make(chan interface{})
 	for cf, fs := range cfs {
-		log.WithFields(log.Fields{
-			"node": id,
-			"cf":   cf,
-			"fs":   fs,
-		}).Info("calling SendCoflow")
-
 		rs, err := s.SendCoflow(cf, fs)
 		if err != nil {
 			panic(err)

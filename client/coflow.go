@@ -1,13 +1,49 @@
 package client
 
 import (
+	"sort"
+
 	"./scheduler"
 
 	log "github.com/sirupsen/logrus"
 )
 
-// sendCoflow manages sending a single coflow
-func (s *Sinchronia) sendCoflow(cf coflowSlice) {
+func (s *Sinchronia) getSchedule() ([]coflowScheduleItem, error) {
+	scheduleRes, err := s.schedClient.GetSchedule(
+		s.ctx,
+		func(
+			p scheduler.Scheduler_getSchedule_Params,
+		) error {
+			p.SetNodeId(s.NodeID)
+			return nil
+		},
+	).Struct()
+
+	if err != nil {
+		return nil, err
+	}
+
+	schRet, err := scheduleRes.Schedule()
+	if schRet.Len() == 0 {
+		return []coflowScheduleItem{}, nil
+	}
+
+	sch := make([]coflowScheduleItem, 0, schRet.Len())
+	for i := 0; i < schRet.Len(); i++ {
+		sch = append(sch, coflowScheduleItem{
+			jobID:    schRet.At(i).JobID(),
+			priority: schRet.At(i).Priority(),
+		})
+	}
+
+	sort.Slice(sch, func(i, j int) bool {
+		return sch[i].priority < sch[j].priority
+	})
+
+	return sch, nil
+}
+
+func (s *Sinchronia) coflowReady(cf coflowSlice) (toRecv map[uint32]Data) {
 rpcReq:
 	recvsRet, err := s.schedClient.SendCoflow(
 		s.ctx,
@@ -47,7 +83,7 @@ rpcReq:
 		panic(err)
 	}
 
-	toRecv := make([]Data, 0, recvs.Len())
+	toRecv = make(map[uint32]Data)
 	for i := 0; i < recvs.Len(); i++ {
 		r := recvs.At(i)
 		d := Data{
@@ -55,48 +91,51 @@ rpcReq:
 			Size:   r.Size(),
 		}
 
-		toRecv = append(toRecv, d)
+		toRecv[d.DataID] = d
 	}
 
-	go s.recvExpected(cf, toRecv)
-
-	// loop through sending each flow
-	for _, sf := range cf.send {
-		prio := <-cf.sendNow
-		log.WithFields(log.Fields{
-			"nodeID": s.NodeID,
-			"coflow": cf.jobID,
-			"flow":   sf,
-		}).Info("sending flow")
-		go sf.send(s.ctx, cf.jobID, prio, s.nodeMap)
-		<-sf.done
-		cf.sent <- struct{}{}
-	}
+	return
 }
 
-func (s *Sinchronia) recvExpected(cf coflowSlice, recv []Data) {
+func (cf *coflowSlice) sendOneFlow(s *Sinchronia, prio uint32) {
+	if len(cf.send) == 0 {
+		return
+	}
+
+	sf := cf.send[0]
+	cf.send = cf.send[1:]
+	log.WithFields(log.Fields{
+		"nodeID": s.NodeID,
+		"coflow": cf.jobID,
+		"flow":   sf,
+	}).Info("sending flow")
+	go sf.send(s.ctx, cf.jobID, prio, s.nodeMap)
+	<-sf.done
+}
+
+func (s *Sinchronia) recvExpected(cf coflowSlice, done chan uint32) {
 	// receive expected flows
 	node := s.NodeID
-	if len(recv) == 0 {
+	if len(cf.recv) == 0 {
 		// no data to receive
 		close(cf.ret)
 		return
 	}
 
-	toRecv := make(map[uint32]Data) // dataID -> Data
-	for _, d := range recv {
-		toRecv[d.DataID] = d
+	recvsCopy := make(map[uint32]Data)
+	for k, v := range cf.recv {
+		recvsCopy[k] = v
 	}
 
 	log.WithFields(log.Fields{
 		"node_id": node,
 		"job_id":  cf.jobID,
 		"where":   "recvExpected",
-		"toRecv":  toRecv,
+		"cf.recv": cf.recv,
 	}).Info("expecting incoming data")
 
 	for f := range cf.incoming {
-		if d, ok := toRecv[f.Info.DataID]; ok {
+		if d, ok := cf.recv[f.Info.DataID]; ok {
 			d.Blob = f.Info.Blob[:]
 			cf.ret <- d
 			log.WithFields(log.Fields{
@@ -106,8 +145,8 @@ func (s *Sinchronia) recvExpected(cf coflowSlice, recv []Data) {
 				"from":    f.From,
 				"where":   "recvExpected",
 			}).Info("returned received data to caller")
-			delete(toRecv, d.DataID)
-			if len(toRecv) == 0 {
+			delete(cf.recv, d.DataID)
+			if len(cf.recv) == 0 {
 				break
 			}
 		} else {
@@ -124,9 +163,10 @@ func (s *Sinchronia) recvExpected(cf coflowSlice, recv []Data) {
 	log.WithFields(log.Fields{
 		"node_id": node,
 		"job_id":  cf.jobID,
-		"recvd":   recv,
+		"recvd":   recvsCopy,
 	}).Info("coflow slice done receiving")
-	s.schedClient.CoflowDone(
+reportDone:
+	_, err := s.schedClient.CoflowDone(
 		s.ctx,
 		func(
 			p scheduler.Scheduler_coflowDone_Params,
@@ -134,18 +174,32 @@ func (s *Sinchronia) recvExpected(cf coflowSlice, recv []Data) {
 			p.SetJobId(cf.jobID)
 			p.SetNodeId(node)
 
-			fin, err := p.NewFinished(int32(len(recv)))
+			fin, err := p.NewFinished(int32(len(recvsCopy)))
 			if err != nil {
-				return err
+				panic(err)
+				//return err
 			}
 
-			for i, d := range recv {
-				fin.Set(i, d.DataID)
+			i := 0
+			for d := range recvsCopy {
+				fin.Set(i, d)
+				i++
 			}
 
 			return nil
 		},
 	).Struct()
 
+	if err != nil {
+		log.WithFields(log.Fields{
+			"node":   node,
+			"job_id": cf.jobID,
+			"where":  "CoflowDone()",
+			"err":    err,
+		}).Warn("CoflowDone() error")
+		goto reportDone
+	}
+
 	close(cf.ret)
+	done <- cf.jobID
 }

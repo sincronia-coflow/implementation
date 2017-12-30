@@ -129,72 +129,77 @@ public:
 
     // Coflow slice from a host is ready to send
     kj::Promise<void> sendCoflow(SendCoflowContext context) {
+        coflow *cf;
         auto cfs = context.getParams();
-        auto job_id = cfs.getJobID();
-            
-        // look up against registered coflows
-        auto cf_pair = this->registered->find(job_id);
-        if (cf_pair == this->registered->end()) {
-            // unknown coflow?
-            std::cerr << "Unknown coflow " << job_id << std::endl;
-            return kj::READY_NOW;
-        }
-
-        auto cf = cf_pair->second;
-
         auto node_id = cfs.getNodeID();
-        auto snds = cfs.getSending();
-        for (auto it = snds.begin(); it != snds.end(); it++) {
-            data s = data {
-                .data_id = it->getDataID(),
-                .size = it->getSize(),
-            };
-
-            auto f_pair = cf->pending_flows->find(s.data_id);
-            if (f_pair == cf->pending_flows->end()) {
-                // unknown flow in coflow?
-                std::cerr 
-                    << "Unknown flow " << s.data_id 
-                    << " in coflow " << job_id 
-                    << std::endl;
-                return kj::READY_NOW;
-            }
-
-            auto f = f_pair->second;
-
-            if (f.from != node_id) {
-                // unknown flow in coflow?
-                std::cerr 
-                    << "Inconsistent flow " << s.data_id 
-                    << " in coflow " << job_id 
-                    << ": sender " << node_id
-                    << " != " << f.to
-                    << std::endl;
-                return kj::READY_NOW;
-            }
-
-            // data size is now known
-            f.info.size = s.size;
-
-            // flow is no longer pending
-            cf->ready_flows->insert(std::pair<uint32_t, flow>(f.info.data_id, f));
-            cf->pending_flows->erase(f_pair);
-        }
-
-        if (cf->pending_flows->empty()) {
-            time_t now = time(NULL);
-            cf->wall_start = now;
-            this->ready->insert(std::pair<uint32_t, coflow*>(job_id, cf));
-            this->registered->erase(cf_pair);
-            cf->ready->fulfill();
-
-            this->rpch->do_schedule();
-        }
-
+        auto job_id = cfs.getJobID();
         std::cout << "\nsendCoflow(job_id " << job_id << ")\n";
         dumpState();
         std::cout << std::endl;
-        
+            
+        // look up against registered coflows
+        auto cf_pair = this->registered->find(job_id);
+        if (cf_pair != this->registered->end()) {
+            cf = cf_pair->second;
+
+            auto snds = cfs.getSending();
+            for (auto it = snds.begin(); it != snds.end(); it++) {
+                data s = data {
+                    .data_id = it->getDataID(),
+                        .size = it->getSize(),
+                };
+
+                auto f_pair = cf->pending_flows->find(s.data_id);
+                if (f_pair == cf->pending_flows->end()) {
+                    // unknown flow in coflow?
+                    std::cerr 
+                        << "Unknown flow " << s.data_id 
+                        << " in coflow " << job_id 
+                        << std::endl;
+                    return kj::READY_NOW;
+                }
+
+                auto f = f_pair->second;
+
+                if (f.from != node_id) {
+                    // unknown flow in coflow?
+                    std::cerr 
+                        << "Inconsistent flow " << s.data_id 
+                        << " in coflow " << job_id 
+                        << ": sender " << node_id
+                        << " != " << f.to
+                        << std::endl;
+                    return kj::READY_NOW;
+                }
+
+                // data size is now known
+                f.info.size = s.size;
+
+                // flow is no longer pending
+                cf->ready_flows->insert(std::pair<uint32_t, flow>(f.info.data_id, f));
+                cf->pending_flows->erase(f_pair);
+            }
+
+            if (cf->pending_flows->empty()) {
+                time_t now = time(NULL);
+                cf->wall_start = now;
+                this->ready->insert(std::pair<uint32_t, coflow*>(job_id, cf));
+                this->registered->erase(cf_pair);
+                cf->ready->fulfill();
+
+                this->rpch->do_schedule();
+            }
+        } else {
+            cf_pair = this->ready->find(job_id);
+            if (cf_pair == this->ready->end()) {
+                std::cout
+                    << "Unknown coflow " << job_id << std::endl;
+                return kj::READY_NOW;
+            }
+
+            cf = cf_pair->second;
+        }
+
         return cf->uponReady
             .addBranch()
             .then([this, KJ_CPCAP(node_id), KJ_CPCAP(cf), KJ_CPCAP(context)]() mutable {
@@ -237,28 +242,28 @@ public:
 
         if (cfs_at_node->empty()) {
             // no coflows for this node. Return empty list.
-            std::cout 
-                << "[getSchedule] "
-                << "node_id: " << node_id  
-                << " no coflows"
-                << std::endl;
+            //std::cout 
+            //    << "[getSchedule] "
+            //    << "node_id: " << node_id  
+            //    << " no coflows"
+            //    << std::endl;
             return kj::READY_NOW;
         }
         
-        std::cout << "[getSchedule] node_id: " << node_id  << "[ ";
-        for (auto it = cfs_at_node->begin(); it != cfs_at_node->end(); it++) {
-            std::cout
-                << "(cf: " << (*it)->job_id 
-                << ", prio: " << (*it)->priority << ") ";
-        }
-        std::cout << "]" << std::endl;
+        //std::cout << "[getSchedule] node_id: " << node_id  << "[ ";
+        //for (auto it = cfs_at_node->begin(); it != cfs_at_node->end(); it++) {
+        //    std::cout
+        //        << "(cf: " << (*it)->job_id 
+        //        << ", prio: " << (*it)->priority << ") ";
+        //}
+        //std::cout << "]" << std::endl;
 
         auto result = context.getResults();
         auto sched = result.initSchedule(cfs_at_node->size());
         i = 0;
         for (auto it = sched.begin(); it != sched.end(); it++) {
-            it->setJobID(cfs_at_node->at(0)->job_id);
-            it->setPriority(cfs_at_node->at(0)->priority);
+            it->setJobID(cfs_at_node->at(i)->job_id);
+            it->setPriority(cfs_at_node->at(i)->priority);
             i++;
         }
 
