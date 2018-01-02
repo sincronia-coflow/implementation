@@ -89,6 +89,7 @@ public:
     // Initial coflow registration
     kj::Promise<void> regCoflow(RegCoflowContext context) {
         auto cfs = context.getParams().getCoflows(); // capnp::List<struct Coflow>::Reader
+        uint32_t bottleneck_size = 0;
 
         for (auto it = cfs.begin(); it != cfs.end(); it++) {
             auto _fs = it->getFlows();
@@ -103,6 +104,10 @@ public:
                     },
                 };
 
+                if (f.info.size > bottleneck_size) {
+                    bottleneck_size = f.info.size;
+                }
+
                 fs->insert(std::pair<uint32_t, flow>(f.info.data_id, f));
             }
 
@@ -112,6 +117,7 @@ public:
                 .job_id = it->getJobID(),
                 .priority = 0x7fffff,
                 .wall_start = now,
+                .bottleneck_size = bottleneck_size,
                 .pending_flows = fs,
                 .ready_flows =  new std::map<uint32_t, flow>(),
                 .ready = kj::mv(waitPair->fulfiller),

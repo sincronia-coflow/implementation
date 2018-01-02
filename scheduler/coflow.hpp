@@ -23,6 +23,7 @@ struct coflow {
     uint32_t job_id;
     uint32_t priority;
     time_t wall_start;
+    uint32_t bottleneck_size;
     std::map<uint32_t, flow> *pending_flows;
     std::map<uint32_t, flow> *ready_flows;
     kj::Own<kj::PromiseFulfiller<void>> ready;
