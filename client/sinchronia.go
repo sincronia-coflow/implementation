@@ -44,7 +44,7 @@ type coflowScheduleItem struct {
 type coflowSlice struct {
 	jobID  uint32
 	nodeID uint32
-	send   []sendFlow
+	send   map[uint32]sendFlow
 	recv   map[uint32]Data
 
 	incoming chan Flow
@@ -61,6 +61,7 @@ type Sinchronia struct {
 	nodeMap     map[uint32]string
 	recv        chan Flow
 	newCoflow   chan coflowSlice
+	stop        chan struct{}
 }
 
 // Sending Loop
@@ -199,12 +200,18 @@ func New(schedAddr string, nodeID uint32, nodes map[uint32]string) (*Sinchronia,
 		nodeMap:     nodes,
 		recv:        make(chan Flow),
 		newCoflow:   make(chan coflowSlice),
+		stop:        make(chan struct{}),
 	}
 
 	go s.newCoflows()
-	go listen(s.NodeID, s.nodeMap[s.NodeID], s.recv)
+	go listen(s.NodeID, s.nodeMap[s.NodeID], s.recv, s.stop)
 
 	return s, nil
+}
+
+// Stop this instance of the agent
+func (s *Sinchronia) Stop() {
+	close(s.stop)
 }
 
 // RegCoflow called by application master to tell scheduler about all coflows.
@@ -263,7 +270,7 @@ func (s *Sinchronia) SendCoflow(
 	jobID uint32,
 	flows []Flow,
 ) (chan Data, error) {
-	sendFlows := make([]sendFlow, 0, len(flows))
+	sendFlows := make(map[uint32]sendFlow)
 	for _, fl := range flows {
 		// make a channel for each flow
 		sf := sendFlow{
@@ -271,7 +278,7 @@ func (s *Sinchronia) SendCoflow(
 			done: make(chan interface{}),
 		}
 
-		sendFlows = append(sendFlows, sf)
+		sendFlows[fl.Info.DataID] = sf
 	}
 
 	cf := coflowSlice{

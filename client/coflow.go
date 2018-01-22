@@ -61,8 +61,10 @@ rpcReq:
 				return err
 			}
 
-			for i, sf := range cf.send {
+			i := 0
+			for _, sf := range cf.send {
 				d := sfs.At(i)
+				i++
 				d.SetDataID(sf.f.Info.DataID)
 				d.SetSize(sf.f.Info.Size)
 			}
@@ -102,15 +104,19 @@ func (cf *coflowSlice) sendOneFlow(s *Sinchronia, prio uint32) {
 		return
 	}
 
-	sf := cf.send[0]
-	cf.send = cf.send[1:]
-	log.WithFields(log.Fields{
-		"nodeID": s.NodeID,
-		"coflow": cf.jobID,
-		"flow":   sf,
-	}).Info("sending flow")
-	go sf.send(s.ctx, cf.jobID, prio, s.nodeMap)
-	<-sf.done
+	// pick an arbtrary flow
+	for dataid, sf := range cf.send {
+		log.WithFields(log.Fields{
+			"nodeID":    s.NodeID,
+			"coflow":    cf.jobID,
+			"flow":      sf,
+			"remaining": cf.send,
+		}).Info("sending flow")
+		delete(cf.send, dataid)
+		go sf.send(s.ctx, cf.jobID, prio, s.nodeMap)
+		<-sf.done
+		return
+	}
 }
 
 func (s *Sinchronia) recvExpected(cf coflowSlice, done chan uint32) {
@@ -149,6 +155,14 @@ func (s *Sinchronia) recvExpected(cf coflowSlice, done chan uint32) {
 			if len(cf.recv) == 0 {
 				break
 			}
+		} else if _, ok := recvsCopy[f.Info.DataID]; ok {
+			log.WithFields(log.Fields{
+				"node_id": node,
+				"job_id":  cf.jobID,
+				"data_id": d.DataID,
+				"from":    f.From,
+				"where":   "recvExpected",
+			}).Warn("received flow duplicate")
 		} else {
 			log.WithFields(log.Fields{
 				"node_id": node,

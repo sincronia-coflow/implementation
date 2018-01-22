@@ -100,7 +100,7 @@ func TestSinchronia(t *testing.T) {
 				Info: Data{
 					DataID: 3,
 					Size:   5,
-					Blob:   []byte{'h', 'e', 'l', 'l', 'o'},
+					Blob:   []byte{'a', 'g', 'a', 'i', 'n'},
 				},
 			},
 		},
@@ -143,7 +143,7 @@ func TestOneDirection(t *testing.T) {
 				From:  1,
 				To:    2,
 				Info: Data{
-					DataID: 1,
+					DataID: 3,
 					Size:   5,
 					Blob:   []byte{'h', 'e', 'l', 'l', 'o'},
 				},
@@ -159,9 +159,9 @@ func TestOneDirection(t *testing.T) {
 				From:  1,
 				To:    2,
 				Info: Data{
-					DataID: 2,
+					DataID: 1,
 					Size:   5,
-					Blob:   []byte{'h', 'e', 'l', 'l', 'o'},
+					Blob:   []byte{'a', 'g', 'a', 'i', 'n'},
 				},
 			},
 			Flow{
@@ -169,9 +169,9 @@ func TestOneDirection(t *testing.T) {
 				From:  1,
 				To:    2,
 				Info: Data{
-					DataID: 3,
-					Size:   5,
-					Blob:   []byte{'h', 'e', 'l', 'l', 'o'},
+					DataID: 2,
+					Size:   3,
+					Blob:   []byte{'f', 'o', 'o'},
 				},
 			},
 		},
@@ -285,5 +285,6 @@ func client(
 	log.WithFields(log.Fields{
 		"node": id,
 	}).Info("client done")
+	s.Stop()
 	done <- struct{}{}
 }

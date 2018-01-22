@@ -3,6 +3,7 @@ package client
 import (
 	"fmt"
 	"net"
+	"time"
 
 	"./scheduler"
 
@@ -74,51 +75,77 @@ func (r Recv) Send(call scheduler.Receiver_send) error {
 	return nil
 }
 
+func accept(ln net.Listener, node uint32, address string) chan net.Conn {
+	ret := make(chan net.Conn)
+	go func() {
+		for {
+			conn, err := ln.Accept()
+			if err != nil {
+				log.WithFields(log.Fields{
+					"nodeId":  node,
+					"address": address,
+					"where":   "open",
+				}).Error(err)
+
+				return
+			}
+
+			ret <- conn
+		}
+	}()
+
+	return ret
+}
+
 func listen(
 	node uint32,
 	address string,
 	done chan Flow,
+	stop chan struct{},
 ) {
+setup:
 	ln, err := net.Listen("tcp4", address)
 	if err != nil {
 		log.WithFields(log.Fields{
 			"nodeId":  node,
 			"address": address,
 			"where":   "listen",
-		}).Error(err)
-		return
+		}).Warn(err)
+		<-time.After(10 * time.Millisecond)
+		goto setup
 	}
 
+	defer ln.Close()
+
+	conns := accept(ln, node, address)
 	for {
-		conn, err := ln.Accept()
-		if err != nil {
-			log.WithFields(log.Fields{
-				"nodeId":  node,
-				"address": address,
-				"where":   "open",
-			}).Error(err)
-			return
+		select {
+		case _, ok := <-stop:
+			if !ok {
+				return
+			}
+		case conn := <-conns:
+			impl := scheduler.Receiver_ServerToClient(Recv{
+				nodeID: node,
+				done:   done,
+			})
+
+			rpcConn := rpc.NewConn(
+				rpc.StreamTransport(conn),
+				rpc.MainInterface(impl.Client),
+			)
+
+			go func(c *rpc.Conn) {
+				err := c.Wait()
+				if err != nil {
+					log.WithFields(log.Fields{
+						"nodeId":  node,
+						"address": address,
+						"where":   "rpc server wait",
+					}).Error(err)
+				}
+			}(rpcConn)
 		}
 
-		impl := scheduler.Receiver_ServerToClient(Recv{
-			nodeID: node,
-			done:   done,
-		})
-
-		rpcConn := rpc.NewConn(
-			rpc.StreamTransport(conn),
-			rpc.MainInterface(impl.Client),
-		)
-
-		go func(c *rpc.Conn) {
-			err := c.Wait()
-			if err != nil {
-				log.WithFields(log.Fields{
-					"nodeId":  node,
-					"address": address,
-					"where":   "rpc server wait",
-				}).Error(err)
-			}
-		}(rpcConn)
 	}
 }
