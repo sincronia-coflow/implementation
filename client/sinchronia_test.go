@@ -181,6 +181,97 @@ func TestOneDirection(t *testing.T) {
 	done <- struct{}{}
 }
 
+func TestSpecial(t *testing.T) {
+	done := make(chan interface{})
+	go func() {
+		c := make(chan os.Signal)
+		signal.Notify(c, syscall.SIGTERM)
+
+		<-c
+		done <- struct{}{}
+	}()
+	ready := make(chan interface{})
+	go runScheduler(context.Background(), ready, done)
+	<-ready
+
+	// define coflows
+	cf1 := Coflow{
+		JobID: 1,
+		Flows: []Flow{
+			Flow{
+				JobID: 1,
+				From:  1,
+				To:    2,
+				Info: Data{
+					DataID: 0,
+					Size:   5,
+					Blob:   []byte{'h', 'e', 'l', 'l', 'o'},
+				},
+			},
+		},
+	}
+
+	cf2 := Coflow{
+		JobID: 2,
+		Flows: []Flow{
+			Flow{
+				JobID: 2,
+				From:  1,
+				To:    2,
+				Info: Data{
+					DataID: 1,
+					Size:   5,
+					Blob:   []byte{'a', 'g', 'a', 'i', 'n'},
+				},
+			},
+			Flow{
+				JobID: 2,
+				From:  2,
+				To:    1,
+				Info: Data{
+					DataID: 2,
+					Size:   3,
+					Blob:   []byte{'f', 'o', 'o'},
+				},
+			},
+		},
+	}
+	cf3 := Coflow{
+		JobID: 3,
+		Flows: []Flow{
+			Flow{
+				JobID: 3,
+				From:  1,
+				To:    2,
+				Info: Data{
+					DataID: 3,
+					Size:   5,
+					Blob:   []byte{'a', 'g', 'a', 'i', 'n'},
+				},
+			},
+		},
+	}
+	cf4 := Coflow{
+		JobID: 4,
+		Flows: []Flow{
+			Flow{
+				JobID: 4,
+				From:  1,
+				To:    2,
+				Info: Data{
+					DataID: 4,
+					Size:   5,
+					Blob:   []byte{'a', 'g', 'a', 'i', 'n'},
+				},
+			},
+		},
+	}
+
+	<-time.After(5 * time.Millisecond)
+	appMaster("127.0.0.1:16424", []Coflow{cf1, cf2, cf3, cf4})
+	done <- struct{}{}
+}
+
 func sliceForClient(cf []Coflow, client uint32) map[uint32][]Flow {
 	cfsl := make(map[uint32][]Flow)
 	for _, c := range cf {
