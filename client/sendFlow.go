@@ -76,7 +76,6 @@ func (f sendFlow) send(
 	}
 
 	conn, err := net.Dial("tcp4", toAddr)
-	defer conn.Close()
 	if err != nil {
 		log.WithFields(log.Fields{
 			"DataID":   f.f.Info.DataID,
@@ -85,6 +84,8 @@ func (f sendFlow) send(
 		}).Error("Dial", err)
 		return
 	}
+
+	defer conn.Close()
 
 	// set DiffServ bits
 	if err := ipv4.NewConn(conn).SetTOS(prio); err != nil {
