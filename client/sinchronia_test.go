@@ -111,6 +111,7 @@ func TestSinchronia(t *testing.T) {
 	done <- struct{}{}
 }
 
+// two coflows on two nodes, all flows from 1 to 2
 func TestOneDirection(t *testing.T) {
 	done := make(chan interface{})
 	go func() {
@@ -176,6 +177,78 @@ func TestOneDirection(t *testing.T) {
 			},
 		},
 	}
+	<-time.After(5 * time.Millisecond)
+	appMaster("127.0.0.1:16424", []Coflow{cf1, cf2})
+	done <- struct{}{}
+}
+
+// Two coflows on two nodes, exchanging data
+func TestCrossing(t *testing.T) {
+	done := make(chan interface{})
+	go func() {
+		c := make(chan os.Signal)
+		signal.Notify(c, syscall.SIGTERM)
+
+		<-c
+		done <- struct{}{}
+	}()
+	ready := make(chan interface{})
+	go runScheduler(context.Background(), ready, done)
+	<-ready
+
+	// define coflows
+	cf1 := Coflow{
+		JobID: 1,
+		Flows: []Flow{
+			Flow{
+				JobID: 1,
+				From:  1,
+				To:    2,
+				Info: Data{
+					DataID: 0,
+					Size:   6,
+					Blob:   []byte{'h', 'e', 'l', 'l', 'o', '!'},
+				},
+			},
+			//Flow{
+			//	JobID: 1,
+			//	From:  2,
+			//	To:    1,
+			//	Info: Data{
+			//		DataID: 1,
+			//		Size:   5,
+			//		Blob:   []byte{'a', 'g', 'a', 'i', 'n'},
+			//	},
+			//},
+		},
+	}
+
+	cf2 := Coflow{
+		JobID: 2,
+		Flows: []Flow{
+			Flow{
+				JobID: 2,
+				From:  1,
+				To:    2,
+				Info: Data{
+					DataID: 2,
+					Size:   4,
+					Blob:   []byte{'b', 'e', 'a', 'r'},
+				},
+			},
+			Flow{
+				JobID: 2,
+				From:  2,
+				To:    1,
+				Info: Data{
+					DataID: 3,
+					Size:   3,
+					Blob:   []byte{'f', 'o', 'o'},
+				},
+			},
+		},
+	}
+
 	<-time.After(5 * time.Millisecond)
 	appMaster("127.0.0.1:16424", []Coflow{cf1, cf2})
 	done <- struct{}{}

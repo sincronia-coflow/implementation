@@ -96,6 +96,11 @@ func (s *Sinchronia) outgoing(newCf chan coflowSlice) {
 			continue
 		}
 
+		log.WithFields(log.Fields{
+			"node":         s.NodeID,
+			"currSchedule": currSchedule,
+		}).Info("got schedule")
+
 		// 2. Of all the local coflows, send the highest priority one
 		for _, scheduled := range currSchedule {
 			mu.Lock()
@@ -139,37 +144,108 @@ func (s *Sinchronia) outgoing(newCf chan coflowSlice) {
 // Distribute incoming flows across all coflows to the correct coflowSlice
 func (s *Sinchronia) incoming(newCf chan coflowSlice) {
 	coflows := make(map[uint32]coflowSlice)
+	orphanage := make(map[uint32][]Flow)
 	done := make(chan uint32)
 	for {
 		select {
 		case cf := <-newCf:
 			coflows[cf.jobID] = cf
 			go s.recvExpected(cf, done)
+
+			// If this coflow lost the race with the sending side, then it has to collect
+			// its orphaned flows from the orphanage.
+			if orphans, ok := orphanage[cf.jobID]; ok {
+				go func(fs []Flow) {
+					log.WithFields(log.Fields{
+						"job":       cf.jobID,
+						"node":      s.NodeID,
+						"coflows":   coflows,
+						"orphanage": orphanage,
+					}).Info("collecting from orphanage")
+					for _, orph := range fs {
+						cf.incoming <- orph
+					}
+
+					delete(orphanage, cf.jobID)
+				}(orphans)
+			}
 		case f := <-s.recv:
-			cf := coflows[f.JobID]
-			cf.incoming <- f
+			cf, ok := coflows[f.JobID]
+
+			// The notification to the receiver and sender in this coflow race.
+			// If the sender gets the notification first, and is immediately scheduled,
+			// then the flow can arrive at the receiver before the receiver is ready to receive it.
+			// In this case, place the received flow(s) in the orphanage until its parent flow arrives
+			// to collect it in cf.incoming.
+			if !ok {
+				if orphans, ok := orphanage[f.JobID]; ok {
+					orphans = append(orphans, f)
+				} else {
+					orphanage[f.JobID] = []Flow{f}
+				}
+
+				log.WithFields(log.Fields{
+					"job":       f.JobID,
+					"node":      s.NodeID,
+					"coflows":   coflows,
+					"orphanage": orphanage,
+				}).Info("putting in orphanage")
+				continue
+			}
+
+			select {
+			case cf.incoming <- f:
+			case <-time.After(time.Second):
+				log.WithFields(log.Fields{
+					"job":     f.JobID,
+					"node":    s.NodeID,
+					"coflows": coflows,
+				}).Info("receiving flow stuck")
+			}
 		case jid := <-done:
 			delete(coflows, jid)
+			log.WithFields(log.Fields{
+				"job":     jid,
+				"node":    s.NodeID,
+				"coflows": coflows,
+			}).Info("coflow done incoming")
 		}
 	}
-
 }
 
 func (s *Sinchronia) newCoflows() {
-	outgoingCh := make(chan coflowSlice)
-	go s.outgoing(outgoingCh)
-	incomingCh := make(chan coflowSlice)
-	go s.incoming(incomingCh)
+	newOutgoingCfs := make(chan coflowSlice)
+	go s.outgoing(newOutgoingCfs)
+	newIncomingCfs := make(chan coflowSlice)
+	go s.incoming(newIncomingCfs)
 	for cf := range s.newCoflow {
 		if len(cf.send) > 0 {
-			outgoingCh <- cf
+			select {
+			case newOutgoingCfs <- cf:
+			case <-time.After(time.Second):
+				log.WithFields(log.Fields{
+					"node":   s.NodeID,
+					"job":    cf.jobID,
+					"coflow": cf,
+				}).Panic("new outgoing stuck")
+			}
 		}
 
 		if len(cf.recv) > 0 {
-			incomingCh <- cf
+			select {
+			case newIncomingCfs <- cf:
+			case <-time.After(time.Second):
+				log.WithFields(log.Fields{
+					"node":   s.NodeID,
+					"job":    cf.jobID,
+					"coflow": cf,
+				}).Panic("new incoming stuck")
+			}
 		} else {
 			close(cf.incoming)
 			close(cf.ret)
+			cf.incoming = nil
+			cf.ret = nil
 		}
 	}
 }
@@ -292,12 +368,25 @@ func (s *Sinchronia) SendCoflow(
 	go func() {
 		cf.recv = s.coflowReady(cf)
 		log.WithFields(log.Fields{
-			"job":    cf.jobID,
-			"node":   s.NodeID,
-			"toSend": cf.send,
-			"toRecv": cf.recv,
+			"job":       cf.jobID,
+			"node":      s.NodeID,
+			"toSend":    cf.send,
+			"toSendLen": len(cf.send),
+			"toRecv":    cf.recv,
+			"toRecvLen": len(cf.recv),
 		}).Info("coflow is ready")
-		s.newCoflow <- cf
+		select {
+		case s.newCoflow <- cf:
+		case <-time.After(10 * time.Second):
+			log.WithFields(log.Fields{
+				"job":       cf.jobID,
+				"node":      s.NodeID,
+				"toSend":    cf.send,
+				"toSendLen": len(cf.send),
+				"toRecv":    cf.recv,
+				"toRecvLen": len(cf.recv),
+			}).Panic("timeout new coflow")
+		}
 	}()
 
 	return cf.ret, nil

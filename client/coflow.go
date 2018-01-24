@@ -2,6 +2,7 @@ package client
 
 import (
 	"sort"
+	"time"
 
 	"./scheduler"
 
@@ -74,8 +75,8 @@ rpcReq:
 	).Struct()
 	if err != nil {
 		log.WithFields(log.Fields{
-			"nodeID": s.NodeID,
-			"err":    err,
+			"node": s.NodeID,
+			"err":  err,
 		}).Warn("SendCoflow() RPC failed")
 		goto rpcReq // retry the rpc request until it succeeds.
 	}
@@ -107,14 +108,23 @@ func (cf *coflowSlice) sendOneFlow(s *Sinchronia, prio uint32) {
 	// pick an arbtrary flow
 	for dataid, sf := range cf.send {
 		log.WithFields(log.Fields{
-			"nodeID":    s.NodeID,
+			"node":      s.NodeID,
 			"coflow":    cf.jobID,
 			"flow":      sf,
 			"remaining": cf.send,
 		}).Info("sending flow")
 		delete(cf.send, dataid)
 		go sf.send(s.ctx, cf.jobID, prio, s.nodeMap)
-		<-sf.done
+		select {
+		case <-sf.done:
+		case <-time.After(10 * time.Second):
+			log.WithFields(log.Fields{
+				"node":      s.NodeID,
+				"coflow":    cf.jobID,
+				"flow":      sf,
+				"remaining": cf.send,
+			}).Panic("timed out")
+		}
 		return
 	}
 }
@@ -134,8 +144,8 @@ func (s *Sinchronia) recvExpected(cf coflowSlice, done chan uint32) {
 	}
 
 	log.WithFields(log.Fields{
-		"node_id": node,
-		"job_id":  cf.jobID,
+		"node":    node,
+		"job":     cf.jobID,
 		"where":   "recvExpected",
 		"cf.recv": cf.recv,
 	}).Info("expecting incoming data")
@@ -143,13 +153,13 @@ func (s *Sinchronia) recvExpected(cf coflowSlice, done chan uint32) {
 	for f := range cf.incoming {
 		if d, ok := cf.recv[f.Info.DataID]; ok {
 			d.Blob = f.Info.Blob[:]
-			cf.ret <- d
+			go func(d Data) { cf.ret <- d }(d) // don't block on the application
 			log.WithFields(log.Fields{
-				"node_id": node,
-				"job_id":  cf.jobID,
-				"data_id": d.DataID,
-				"from":    f.From,
-				"where":   "recvExpected",
+				"node":  node,
+				"job":   cf.jobID,
+				"data":  d.DataID,
+				"from":  f.From,
+				"where": "recvExpected",
 			}).Info("returned received data to caller")
 			delete(cf.recv, d.DataID)
 			if len(cf.recv) == 0 {
@@ -157,27 +167,27 @@ func (s *Sinchronia) recvExpected(cf coflowSlice, done chan uint32) {
 			}
 		} else if _, ok := recvsCopy[f.Info.DataID]; ok {
 			log.WithFields(log.Fields{
-				"node_id": node,
-				"job_id":  cf.jobID,
-				"data_id": d.DataID,
-				"from":    f.From,
-				"where":   "recvExpected",
+				"node":  node,
+				"job":   cf.jobID,
+				"data":  d.DataID,
+				"from":  f.From,
+				"where": "recvExpected",
 			}).Warn("received flow duplicate")
 		} else {
 			log.WithFields(log.Fields{
-				"node_id": node,
-				"job_id":  cf.jobID,
-				"data_id": d.DataID,
-				"from":    f.From,
-				"where":   "recvExpected",
+				"node":  node,
+				"job":   cf.jobID,
+				"data":  d.DataID,
+				"from":  f.From,
+				"where": "recvExpected",
 			}).Warn("received unexpected flow")
 		}
 	}
 
 	log.WithFields(log.Fields{
-		"node_id": node,
-		"job_id":  cf.jobID,
-		"recvd":   recvsCopy,
+		"node":  node,
+		"job":   cf.jobID,
+		"recvd": recvsCopy,
 	}).Info("coflow slice done receiving")
 reportDone:
 	_, err := s.schedClient.CoflowDone(
@@ -206,10 +216,10 @@ reportDone:
 
 	if err != nil {
 		log.WithFields(log.Fields{
-			"node":   node,
-			"job_id": cf.jobID,
-			"where":  "CoflowDone()",
-			"err":    err,
+			"node":  node,
+			"job":   cf.jobID,
+			"where": "CoflowDone()",
+			"err":   err,
 		}).Warn("CoflowDone() error")
 		goto reportDone
 	}

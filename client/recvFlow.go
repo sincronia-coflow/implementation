@@ -22,7 +22,7 @@ func (r Recv) Send(call scheduler.Receiver_send) error {
 	params, err := call.Params.Data()
 	if err != nil {
 		log.WithFields(log.Fields{
-			"node_id":      r.nodeID,
+			"node":         r.nodeID,
 			"given_nodeid": params.To(),
 			"jobid":        params.JobID(),
 			"where":        "send - params",
@@ -31,10 +31,10 @@ func (r Recv) Send(call scheduler.Receiver_send) error {
 
 	if params.To() != r.nodeID {
 		log.WithFields(log.Fields{
-			"node_id":      r.nodeID,
+			"node":         r.nodeID,
 			"given_nodeid": params.To(),
 			"jobid":        params.JobID(),
-			"where":        "send - nodeId",
+			"where":        "send - node",
 		}).Warn("received destination node id does not match")
 		return fmt.Errorf(
 			"received destination node id does not match: %d != %d",
@@ -46,7 +46,7 @@ func (r Recv) Send(call scheduler.Receiver_send) error {
 	blob, err := params.Blob()
 	if err != nil {
 		log.WithFields(log.Fields{
-			"nodeId": r.nodeID,
+			"node":   r.nodeID,
 			"dataId": params.DataID,
 			"read":   len(blob),
 			"where":  "send - read",
@@ -55,7 +55,7 @@ func (r Recv) Send(call scheduler.Receiver_send) error {
 	}
 
 	log.WithFields(log.Fields{
-		"nodeId": r.nodeID,
+		"node":   r.nodeID,
 		"jobid":  params.JobID(),
 		"dataId": params.DataID,
 		"read":   len(blob),
@@ -82,7 +82,7 @@ func accept(ln net.Listener, node uint32, address string) chan net.Conn {
 			conn, err := ln.Accept()
 			if err != nil {
 				log.WithFields(log.Fields{
-					"nodeId":  node,
+					"node":    node,
 					"address": address,
 					"where":   "open",
 				}).Error(err)
@@ -107,7 +107,7 @@ setup:
 	ln, err := net.Listen("tcp4", address)
 	if err != nil {
 		log.WithFields(log.Fields{
-			"nodeId":  node,
+			"node":    node,
 			"address": address,
 			"where":   "listen",
 		}).Warn(err)
@@ -139,7 +139,7 @@ setup:
 				err := c.Wait()
 				if err != nil {
 					log.WithFields(log.Fields{
-						"nodeId":  node,
+						"node":    node,
 						"address": address,
 						"where":   "rpc server wait",
 					}).Error(err)

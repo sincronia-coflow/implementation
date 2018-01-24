@@ -3,6 +3,7 @@ package client
 import (
 	"context"
 	"net"
+	"time"
 
 	"./scheduler"
 
@@ -71,18 +72,20 @@ func (f sendFlow) send(
 			"To":       f.f.To,
 			"Priority": prio,
 			"NodeMap":  nodeMap,
-		}).Error("Could not resolve address")
-		return
+		}).Panic("Could not resolve address")
 	}
 
+dial:
 	conn, err := net.Dial("tcp4", toAddr)
 	if err != nil {
 		log.WithFields(log.Fields{
 			"DataID":   f.f.Info.DataID,
 			"To":       f.f.To,
+			"node":     f.f.From,
 			"Priority": prio,
-		}).Error("Dial", err)
-		return
+		}).Warn("Dial", err)
+		<-time.After(time.Millisecond)
+		goto dial
 	}
 
 	defer conn.Close()
