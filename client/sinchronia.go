@@ -90,6 +90,7 @@ func (s *Sinchronia) outgoing(newCf chan coflowSlice) {
 			//	"node": s.NodeID,
 			//	"err":  err,
 			//}).Warn("GetSchedule RPC")
+			continue
 		}
 
 		if len(currSchedule) == 0 {
