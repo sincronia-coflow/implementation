@@ -97,10 +97,10 @@ func (s *Sincronia) outgoing(newCf chan coflowSlice) {
 			continue
 		}
 
-		log.WithFields(log.Fields{
-			"node":         s.NodeID,
-			"currSchedule": currSchedule,
-		}).Info("got schedule")
+		//log.WithFields(log.Fields{
+		//	"node":         s.NodeID,
+		//	"currSchedule": currSchedule,
+		//}).Info("got schedule")
 
 		// 2. Of all the local coflows, send the highest priority one
 		for _, scheduled := range currSchedule {
@@ -123,7 +123,7 @@ func (s *Sincronia) outgoing(newCf chan coflowSlice) {
 				//}).Warn("scheduled coflow already finished")
 				//mu.Unlock()
 			} else {
-				fmt.Println("Okay!!")
+				//fmt.Println("Okay!!")
 				log.WithFields(log.Fields{
 					"node":   s.NodeID,
 					"currCf": currCf.jobID,
