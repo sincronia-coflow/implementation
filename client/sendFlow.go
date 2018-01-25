@@ -40,19 +40,19 @@ func diffServFromPriority(prio uint8) int {
 	case 0:
 		return 0x00
 	case 1:
-		return 0x0e
+		return 0x20
 	case 2:
-		return 0x0c
+		return 0x40
 	case 3:
-		return 0x0a
+		return 0x60
 	case 4:
-		return 0x16
+		return 0x80
 	case 5:
-		return 0x14
+		return 0xa0
 	case 6:
-		return 0x12
+		return 0xc0
 	case 7:
-		return 0x1e
+		return 0xe0
 	}
 
 	panic("unreachable uint8")

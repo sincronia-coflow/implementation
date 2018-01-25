@@ -163,10 +163,10 @@ func (s *Sincronia) incoming(newCf chan coflowSlice) {
 			if orphans, ok := orphanage[cf.jobID]; ok {
 				go func(fs []Flow) {
 					log.WithFields(log.Fields{
-						"job":       cf.jobID,
-						"node":      s.NodeID,
-						"coflows":   coflows,
-						"orphanage": orphanage,
+						"job":  cf.jobID,
+						"node": s.NodeID,
+						// 						"coflows":   coflows,
+						// 						"orphanage": orphanage,
 					}).Info("collecting from orphanage")
 					for _, orph := range fs {
 						cf.incoming <- orph
@@ -193,10 +193,10 @@ func (s *Sincronia) incoming(newCf chan coflowSlice) {
 				}
 
 				log.WithFields(log.Fields{
-					"job":       f.JobID,
-					"node":      s.NodeID,
-					"coflows":   coflows,
-					"orphanage": orphanage,
+					"job":  f.JobID,
+					"node": s.NodeID,
+					// 					"coflows":   coflows,
+					// 					"orphanage": orphanage,
 				}).Info("putting in orphanage")
 				continue
 			}
@@ -205,17 +205,17 @@ func (s *Sincronia) incoming(newCf chan coflowSlice) {
 			case cf.incoming <- f:
 			case <-time.After(time.Second):
 				log.WithFields(log.Fields{
-					"job":     f.JobID,
-					"node":    s.NodeID,
-					"coflows": coflows,
+					"job":  f.JobID,
+					"node": s.NodeID,
+					// 					"coflows": coflows,
 				}).Info("receiving flow stuck")
 			}
 		case jid := <-done:
 			delete(coflows, jid)
 			log.WithFields(log.Fields{
-				"job":     jid,
-				"node":    s.NodeID,
-				"coflows": coflows,
+				"job":  jid,
+				"node": s.NodeID,
+				// 				"coflows": coflows,
 			}).Info("coflow done incoming")
 		}
 	}
@@ -244,9 +244,9 @@ func (s *Sincronia) newCoflows() {
 			case newIncomingCfs <- cf:
 			case <-time.After(time.Second):
 				log.WithFields(log.Fields{
-					"node":   s.NodeID,
-					"job":    cf.jobID,
-					"coflow": cf,
+					"node": s.NodeID,
+					"job":  cf.jobID,
+					// 					"coflow": cf,
 				}).Panic("new incoming stuck")
 			}
 		} else {

@@ -59,6 +59,7 @@ func (r Recv) Send(call scheduler.Receiver_send) error {
 		"jobid":  params.JobID(),
 		"dataId": params.DataID,
 		"read":   len(blob),
+		// 		"blob": blob,
 	}).Info("read")
 
 	r.done <- Flow{

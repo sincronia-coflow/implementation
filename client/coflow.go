@@ -38,7 +38,7 @@ func (s *Sincronia) getSchedule() ([]coflowScheduleItem, error) {
 	}
 
 	sort.Slice(sch, func(i, j int) bool {
-		return sch[i].priority < sch[j].priority
+		return sch[i].priority > sch[j].priority
 	})
 
 	return sch, nil
