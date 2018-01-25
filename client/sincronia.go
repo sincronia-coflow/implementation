@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/akshayknarayan/sincronia/client/scheduler"
+
 	log "github.com/sirupsen/logrus"
 	"zombiezen.com/go/capnproto2/rpc"
 )
@@ -85,10 +86,10 @@ func (s *Sincronia) outgoing(newCf chan coflowSlice) {
 		// 1. Poll the master for the CoflowSchedule
 		currSchedule, err = s.getSchedule()
 		if err != nil {
-			//log.WithFields(log.Fields{
-			//	"node": s.NodeID,
-			//	"err":  err,
-			//}).Warn("GetSchedule RPC")
+			log.WithFields(log.Fields{
+				"node": s.NodeID,
+				"err":  err,
+			}).Warn("GetSchedule RPC")
 			continue
 		}
 
@@ -103,10 +104,14 @@ func (s *Sincronia) outgoing(newCf chan coflowSlice) {
 
 		// 2. Of all the local coflows, send the highest priority one
 		for _, scheduled := range currSchedule {
+			//fmt.Println("Scheduled!!!! ",scheduled)
 			mu.Lock()
+			//fmt.Println("Coflows: ",coflows)
 			currCf, ok := coflows[scheduled.jobID]
+			//fmt.Println("Look here ",currCf)
 			mu.Unlock()
 			if !ok {
+				//fmt.Println("Not okay!!")
 				// this coflow already finished
 				//mu.Lock()
 				//log.WithFields(log.Fields{
@@ -118,6 +123,7 @@ func (s *Sincronia) outgoing(newCf chan coflowSlice) {
 				//}).Warn("scheduled coflow already finished")
 				//mu.Unlock()
 			} else {
+				fmt.Println("Okay!!")
 				log.WithFields(log.Fields{
 					"node":   s.NodeID,
 					"currCf": currCf.jobID,
@@ -179,7 +185,9 @@ func (s *Sincronia) incoming(newCf chan coflowSlice) {
 			// to collect it in cf.incoming.
 			if !ok {
 				if orphans, ok := orphanage[f.JobID]; ok {
-					orphans = append(orphans, f)
+					//orphans = append(orphans, f)
+					//fmt.Println(orphans)
+					orphanage[f.JobID] = append(orphans, f)
 				} else {
 					orphanage[f.JobID] = []Flow{f}
 				}

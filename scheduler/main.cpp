@@ -5,6 +5,7 @@
 #include <map>
 
 #include "sincronia.capnp.h"
+#include <algorithm>
 #include <capnp/rpc-twoparty.h>
 #include <capnp/message.h>
 #include <kj/async.h>
@@ -46,7 +47,7 @@ void RpcHandler::do_schedule() {
     uint32_t prio = 0;
     for (auto it = this->schedule->begin(); it != this->schedule->end(); it++) {
         coflow *curr_cf = *it;
-        curr_cf->priority = prio;
+        curr_cf->priority = std::max(7-((int)prio),0);
         std::cout 
             << "[scheduler] fulfilling cf " 
             << curr_cf->job_id << ": "
