@@ -3,7 +3,7 @@
 #include <iostream>
 #include "common.h"
 
-int CONVERSION_FACTOR = 134217728; //assuming 1 Gbps Access link bandwidth, coflow size in Bytes, deadline in seconds, data sent in 1 sec = 1 gigabit = 1024*1024*1024/8 bytes
+double CONVERSION_FACTOR = 134.217728; //assuming 1 Gbps Access link bandwidth, coflow size in Bytes, deadline in microseconds, data sent in 1 microsec = 1 gigabit/1e6 = 1024*1024*1024/8 bytes
 std::vector<Coflow> generate_online_admissible_set_coflows(std::vector<Coflow> unscheduled_coflows,double deadline){
   std::vector<Coflow> selected_coflow_vector;
   std::vector<Coflow> unselected_coflow_vector;

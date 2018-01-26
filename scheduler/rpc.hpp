@@ -13,13 +13,13 @@
 #include <kj/async-io.h>
 #include <kj/memory.h>
 #include <kj/debug.h>
+#include <sys/time.h>
 
 #include "sinchronia-coflow.hpp"
 #include "scheduler.hpp"
 #include "common.h"
 //std::ofstream myfile;
 //    myfile.open ("coflow-done.txt");
-
 class RpcHandler final : kj::TaskSet::ErrorHandler {
 public:
     RpcHandler(CoflowScheduler *sch);
@@ -115,7 +115,7 @@ public:
             auto cf = new coflow{
                 .job_id = it->getJobID(),
                 .priority = 0x7fffff,
-                .wall_start = now,
+                .wall_start = getMicrotime(),
                 .bottleneck_size = 0,
                 .pending_flows = fs,
                 .ready_flows =  new std::map<uint32_t, flow>(),
@@ -193,7 +193,8 @@ public:
 
             if (cf->pending_flows->empty()) {
                 time_t now = time(NULL);
-                cf->wall_start = now;
+//                 cf->wall_start = now;
+                cf->wall_start = getMicrotime();
                 this->ready->insert(std::pair<uint32_t, coflow*>(job_id, cf));
                 this->registered->erase(cf_pair);
                 cf->ready->fulfill();
@@ -300,12 +301,12 @@ public:
 
         if (cf->ready_flows->empty()) {
             // the coflow is done.
-            time_t now = time(NULL);
-            auto elapsed = difftime(now, cf->wall_start);
+            long now = getMicrotime();
+            auto elapsed = now - cf->wall_start;
             std::cout
                 << "[coflowDone] "
                 << "job_id: " << job_id << " "
-                << "elapased: " << elapsed << " "
+                << "elapsed (microseconds): " << elapsed << " "
                 << std::endl;
             myfile
                 << "[coflowDone] "

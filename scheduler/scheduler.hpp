@@ -6,6 +6,7 @@
 #include <vector>
 #include <ctime>
 #include <iomanip>
+#include <sys/time.h>
 
 #include "coflow.h"
 #include "onlinescheduler.h"
@@ -17,6 +18,11 @@
 #include "sinchronia-coflow.hpp"
 
 Bigswitch B;
+long getMicrotime(){
+	struct timeval currentTime;
+	gettimeofday(&currentTime, NULL);
+	return currentTime.tv_sec * (int)1e6 + currentTime.tv_usec;
+}
 std::vector<Coflow> inadmissible_coflows;
 // bool heuristic(const Coflow & c1, const Coflow & c2){
 //   double counter = current_time.epoch_start + current_time.timeStep;
@@ -35,8 +41,8 @@ bool heuristic(const Coflow & c1, const Coflow & c2){
 bool heuristic_comp(const Coflow & c1, const Coflow & c2)
 {
   // std::cout << "x: " << x << '\n';
-  double counter = time(NULL);
-  double x = 32;
+  double counter = (double) getMicrotime();
+  double x = 128*100000;
   if(((((double)counter)+x - ((double)c1.release_date))/c1.oracle_time) == ((((double)counter) + x- ((double)c2.release_date))/c2.oracle_time)){
     return c1.release_date < c2.release_date;
   }
@@ -49,26 +55,26 @@ bool heuristic_comp(const Coflow & c1, const Coflow & c2)
 
 // ticks every second
 struct coflowTimeUnit{
-    time_t epoch_start;
-    uint32_t timeStep;
+	long epoch_start;
+	long timeStep;
 }; // wall clock seconds since epoch start
 
 // TODO a Phase contains scheduling Epochs
 struct coflowTimeUnit sincronia_epoch_reset() {
     return {
-        .epoch_start = time(NULL),
+	    .epoch_start = getMicrotime(),
         .timeStep = 0,
     };
 }
 
-void sincronia_update_time(struct coflowTimeUnit *now) {
-    time_t wall = time(NULL);
-    double seconds = difftime(wall, now->epoch_start);
-    now->timeStep = (uint32_t) seconds;
+void sincronia_update_time(struct coflowTimeUnit *now) { //update time updates the timeStep to the microseconds till start of the epoch
+	long wall = getMicrotime();
+	long microseconds = wall - now->epoch_start;
+	now->timeStep = microseconds;
 };
 
 kj::Duration sincronia_duration(uint32_t time_steps) {
-    return time_steps * kj::SECONDS;
+	return time_steps * 100 * kj::MILLISECONDS;
 }
 
 class CoflowScheduler {
@@ -129,11 +135,11 @@ public:
     std::vector<Coflow> scheduled_coflows; //scheduled coflows, priorities not to be disturbed for these coflows, if present in the ready queue, will only be updated if the first if condition is true
     OnlineScheduler() : CoflowScheduler() {
       this->epoch_no = -2;  //default epoch counter = -1
-      this->abs_wall_start = (this->current_time).epoch_start;
-      this->MAX_RESET_COUNTER = 8;
+      this->abs_wall_start = (this->current_time).epoch_start; //wall start time in microseconds
+      this->MAX_RESET_COUNTER = 8; //8 means one big epoch is of size 2^8 time units (1 time unit here is 100millisecond)
       this->ACCESS_LINK_BANDWIDTH = 1; //Gbps
       B.no_ports = 20;
-      std::cout << "recorded abs_wall_start_time: " << abs_wall_start << '\n';
+      std::cout << std::setprecision(20) << "recorded abs_wall_start_time: " << abs_wall_start << '\n';
     };
 
 
@@ -232,7 +238,7 @@ public:
 
 
     virtual kj::Duration time_to_schedule() {
-      std::cout << "time to schedule called at time: " << time(NULL) << '\n';
+	std::cout << std::setprecision(20) << "time to schedule called at time: " << getMicrotime() << '\n';
       epoch_no = epoch_no + 1;
       if(epoch_no == MAX_RESET_COUNTER){
         epoch_no = 0;
@@ -258,7 +264,7 @@ public:
 
     // The scheduler orders the ready coflows
     virtual void schedule(std::vector<coflow*> *to_schedule) {
-        std::cout << "time of calling schedule(): " << time(NULL) << '\n';
+        std::cout << std::setprecision(20) << "time of calling schedule(): " << getMicrotime() << '\n';
         sinchronia_update_time(&current_time); //this will give access to the current time wrt the current spoch start time
 
         std::vector<Coflow> vector_coflows, work_cons_coflows;
@@ -281,8 +287,8 @@ public:
         // std::cout << " " << '\n';
         int epoch_end_time_steps = find_epoch_end_time_steps(epoch_no);
         std::cout << "current epoch: "  << epoch_no << '\n';
-        std::cout << "epoch end time steps: " <<  epoch_end_time_steps << '\n';
-        std::cout << "current time steps elapsed: " <<  current_time.timeStep << '\n';
+        std::cout << std::setprecision(20)<< "epoch end time steps (microsecond): " <<  epoch_end_time_steps*100000 << '\n';
+        std::cout << std::setprecision(20)<< "current time steps elapsed (microsecond): " <<  current_time.timeStep << '\n';
         //gives the end time of the current epoch given by epoch_no
 
         // if(current_time.timeStep >= epoch_end_time_steps){
@@ -292,7 +298,7 @@ public:
         //   if(epoch_no==MAX_RESET_COUNTER){
         //     epoch_no = 0;
         //   }
-        if(current_time.timeStep == 0){ //start of the epoch
+        if(current_time.timeStep <200){ //start of the epoch
           std::cout << "In loop 1:" << '\n';
           //find admissible coflows for the current epoch
           //update both scheduled coflows and work conserving coflows
@@ -318,28 +324,22 @@ public:
 		left_out_coflows.push_back(input_coflows[i]);
 		}
 	  }
-          int deadline = find_deadline_time_steps_for_epoch();
+          long deadline = find_deadline_time_steps_for_epoch()*100000; //deadline in microseconds
           std::cout << "deadline: " << deadline << '\n';
-		std::cout << "a" << '\n';
           std::vector<Coflow> admitted_coflows = generate_online_admissible_set_coflows(candidate_coflows,deadline);
           //TODO change constraint to match access link BW, unit of coflow size and time unit
-		std::cout << "b" << '\n';
 		display_coflows(admitted_coflows);
           std::vector<Coflow> vector_coflows = primal_dual_ordering(admitted_coflows,B);
-		std::cout << "c" << '\n';
           scheduled_coflows = vector_coflows; //these priorities won't change until the next epoch
           //inadmissible coflows will be work conserving coflows
-		std::cout << "d" << '\n';
           std::vector<Coflow> work_cons_coflows = inadmissible_coflows;
 	  for(int i=0;i<left_out_coflows.size();i++){
 		work_cons_coflows.push_back(left_out_coflows[i]);
 	  }
-		std::cout << "e" << '\n';
           std::stable_sort(work_cons_coflows.begin(),work_cons_coflows.end(),heuristic_comp);
           for(int i=0;i<work_cons_coflows.size();i++){
             vector_coflows.push_back(work_cons_coflows[i]);
           }
-		std::cout << "f" << '\n';
         }
         else{
           std::cout << "loop 2" << '\n';
