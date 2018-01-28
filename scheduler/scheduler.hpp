@@ -272,15 +272,6 @@ public:
         work_cons_coflows.clear();
         // std::cout << "Input scheduler" << '\n';
         std::vector<Coflow> input_coflows = convert_coflow_structure(to_schedule);
-        std::cout << "input coflow characteristics: " << '\n';
-        for(int i=0;i<input_coflows.size();i++){
-          std::cout << "Coflow ID: " << input_coflows[i].coflow_id << " start time: " << input_coflows[i].release_date << " oracle_time: " << input_coflows[i].oracle_time;
-          std::cout << " flows: ";
-          for(int j=0;j<input_coflows[i].flows.size();j++){
-            std::cout << " flow " << j+1 << " : from: " <<  input_coflows[i].flows[j].sender_id << " size left: " << input_coflows[i].flows[j].size_left << " to: " << input_coflows[i].flows[j].receiver_id;
-          }
-          std::cout << '\n';
-        }
         // for(int i=0;i<input_coflows.size();i++){
         //   std::cout << "ID: " << input_coflows[i].coflow_id << ' ';
         // }
@@ -328,7 +319,6 @@ public:
           std::cout << "deadline: " << deadline << '\n';
           std::vector<Coflow> admitted_coflows = generate_online_admissible_set_coflows(candidate_coflows,deadline);
           //TODO change constraint to match access link BW, unit of coflow size and time unit
-		display_coflows(admitted_coflows);
           std::vector<Coflow> vector_coflows = primal_dual_ordering(admitted_coflows,B);
           scheduled_coflows = vector_coflows; //these priorities won't change until the next epoch
           //inadmissible coflows will be work conserving coflows
@@ -359,8 +349,6 @@ public:
               }
             }
           }
-          std::cout << "input_coflows after removing scheduled coflows" << '\n';
-          display_coflows(input_coflows);
           // std::cout << "vector_coflows after removing scheduled_coflows" << '\n';
           // display_coflows(vector_coflows);
 
@@ -369,9 +357,6 @@ public:
           for(int i=0;i<work_cons_coflows.size();i++){
             vector_coflows.push_back(work_cons_coflows[i]);
           }
-          std::cout << "sorted work_cons_coflows" << '\n';
-          std::cout << "final vector_coflows with scheduled + work_cons_coflows" << '\n';
-          display_coflows(vector_coflows);
 
         }
         //convert the ordering into shuffling the required vector of coflow pointers

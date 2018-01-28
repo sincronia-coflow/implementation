@@ -15,5 +15,7 @@ extern Bigswitch B;
 // extern std::vector<Coflow> work_conservation_coflows;
 extern std::vector<Coflow> inadmissible_coflows;
 extern std::ofstream myfile;
+extern std::ofstream logfile;
+extern std::ofstream logfile2;
 
 #endif
