@@ -15,6 +15,8 @@
 #include "scheduler.hpp"
 #include "rpc.hpp"
 std::ofstream myfile;
+std::ofstream logfile;
+std::ofstream logfile2;
   //  myfile.open ("coflow-done.txt");
 RpcHandler::RpcHandler(CoflowScheduler *sch) :
     ioContext(kj::setupAsyncIo()),
@@ -49,11 +51,6 @@ void RpcHandler::do_schedule() {
     for (auto it = this->schedule->begin(); it != this->schedule->end(); it++) {
         coflow *curr_cf = *it;
         curr_cf->priority = std::max(7-((int)prio),0);
-        std::cout
-            << "[scheduler] fulfilling cf "
-            << curr_cf->job_id << ": "
-            << curr_cf->priority
-            << std::endl;
         prio++;
     }
 };
@@ -88,7 +85,9 @@ void RpcHandler::start_rpc_handler() {
 };
 
 int main(int argv, char **argc) {
-    myfile.open ("coflow-done.txt");    
+    myfile.open ("coflow-done.txt");
+    logfile.open("start.txt");
+    logfile2.open("end.txt");
 // CoflowScheduler *sch = new DummyScheduler();
     std::cout << "Time of calling the scheduler: " << time(NULL) << '\n';
     CoflowScheduler *sch = new OnlineScheduler();

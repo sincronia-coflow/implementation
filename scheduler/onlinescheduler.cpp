@@ -83,12 +83,9 @@ std::vector<Coflow> generate_online_admissible_set_coflows(std::vector<Coflow> u
   for(int i=0;i<unscheduled_coflows.size();i++){
     if(vector_select[i]==1){
       selected_coflow_vector.push_back(unscheduled_coflows[i]);
-      // B.scheduled_coflows.push_back(unscheduled_coflows[i]);
     }
     else{
       unselected_coflow_vector.push_back(unscheduled_coflows[i]);
-      // B.unscheduled_coflows.push_back(unscheduled_coflows[i]);
-      // work_conservation_coflows.push_back(unscheduled_coflows[i]);
     }
   }
   }catch(GRBException e) {
@@ -111,10 +108,8 @@ std::vector<Coflow> find_candidate_coflow_set(std::vector<Coflow> C, double dead
   std::vector<Coflow> R_k;
   std::vector<Coflow> new_unscheduled_vector;
   for(int i=0;i<C.size();i++){
-    // std::cout << "Cid: " << C[i].coflow_id << " release_date: " << C[i].release_date << " deadline: " << deadline << '\n';
     if(C[i].release_date <= deadline){
       R_k.push_back(C[i]);
-      // B.scheduled_coflows.push_back(C[i]);
     }
     else{
       new_unscheduled_vector.push_back(C[i]);

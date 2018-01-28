@@ -18,8 +18,6 @@
 #include "sincronia-coflow.hpp"
 #include "scheduler.hpp"
 #include "common.h"
-//std::ofstream myfile;
-//    myfile.open ("coflow-done.txt");
 class RpcHandler final : kj::TaskSet::ErrorHandler {
 public:
     RpcHandler(CoflowScheduler *sch);
@@ -128,7 +126,6 @@ public:
         }
 
         std::cout << "\nregCoflow()" << std::endl;
-        dumpState();
 
         return kj::READY_NOW;
     };
@@ -140,7 +137,6 @@ public:
         auto node_id = cfs.getNodeID();
         auto job_id = cfs.getJobID();
         std::cout << "\nsendCoflow(job_id " << job_id << ")\n";
-        dumpState();
         std::cout << std::endl;
 
         // look up against registered coflows
@@ -195,6 +191,7 @@ public:
                 time_t now = time(NULL);
 //                 cf->wall_start = now;
                 cf->wall_start = getMicrotime();
+                logfile << "START " << job_id << " " << cf->wall_start << std::endl;
                 this->ready->insert(std::pair<uint32_t, coflow*>(job_id, cf));
                 this->registered->erase(cf_pair);
                 cf->ready->fulfill();
@@ -302,16 +299,12 @@ public:
         if (cf->ready_flows->empty()) {
             // the coflow is done.
             long now = getMicrotime();
+            logfile2 << "END " << job_id << " " << now << std::endl; 
             auto elapsed = now - cf->wall_start;
-            std::cout
-                << "[coflowDone] "
-                << "job_id: " << job_id << " "
-                << "elapsed (microseconds): " << elapsed << " "
-                << std::endl;
             myfile
                 << "[coflowDone] "
                 << "job_id: " << job_id << " "
-                << "elapased: " << elapsed << " "
+                << "elapased: " << elapsed << " " << "start: " << cf->wall_start << " " << "end: " << now
                 << std::endl;
             this->ready->erase(cf_pair);
         }

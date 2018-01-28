@@ -19,11 +19,8 @@ std::vector<Coflow> primal_dual_ordering(std::vector<Coflow> coflows, Bigswitch 
   B.portsize = bigs.no_ports;
 
 
-  //FILE *F;
-  //F = fopen("input.txt","r");         //Create and open file for input
 
   int numCoflows;
-  //fscanf(F,"%d",&numCoflows);          //First line in file contains the number of Coflows
   numCoflows = coflows.size();
 
   struct coflow_2 *J = (struct coflow_2*) malloc(numCoflows * sizeof(struct coflow_2));   //allocate memory for array of coflows
@@ -31,7 +28,6 @@ std::vector<Coflow> primal_dual_ordering(std::vector<Coflow> coflows, Bigswitch 
   int i;
   for (i = 0; i < numCoflows; i++) {
 
-    //fscanf(F,"%d",&J[i].w_k);
     J[i].w_k = coflows[i].weight;
     J[i].scheduled = -1;
     J[i].D_k = (int**) malloc(B.portsize * sizeof(int*));     //allocate memory for 2D array D_k of size m*m
@@ -44,7 +40,6 @@ std::vector<Coflow> primal_dual_ordering(std::vector<Coflow> coflows, Bigswitch 
     int k,l;
     for(k=0;k<B.portsize;k++){
       for(l=0;l<B.portsize;l++){
-        //fscanf(F,"%d",&J[i].D_k[k][l]);    //input the flow sizes in the newly allocated D_k matrix
         J[i].D_k[k][l] = 0;
       }
     }
@@ -99,7 +94,7 @@ std::vector<Coflow> primal_dual_ordering(std::vector<Coflow> coflows, Bigswitch 
     int q1;
     for(q1=0;q1<2*B.portsize;q1++){
       temp_v_k[q1] = 0.0;
-    }  //IMPORTANT!! added this line! (check if this makes any change in the prev code)
+    }
 
 
     for(l=0;l<numCoflows;l++){
@@ -111,7 +106,6 @@ std::vector<Coflow> primal_dual_ordering(std::vector<Coflow> coflows, Bigswitch 
 
 
 
-        //p_k[k-1] = J[l].m_k;       //we allocate p_k to be the port number with max flow size across all unscheduled jobs/coflows
       }
       int x;
       int max_val = -1;
@@ -122,15 +116,12 @@ std::vector<Coflow> primal_dual_ordering(std::vector<Coflow> coflows, Bigswitch 
         }
       }
     }
-    //printf("k is %d, p_k is %d\n",k,p_k[k-1] );
     float min_beta = 1000000000000000.0;
-    //printf("min_beta is %f\n",min_beta);
     int min_j;
     int j;
     for(j=0;j<numCoflows;j++){  //we need to find the min value of term over all the jobs/coflows
       if(J[j].scheduled!=-1)    //if coflow is already scheduled, we do not consider the coflow
         continue;
-      //printf("%d coflow considered and its weight is %d\n",j+1,J[j].w_k );
       int n;
       float sum_v_beta = 0.0;
       for(n=1;n<=k-1;n++){
@@ -138,7 +129,6 @@ std::vector<Coflow> primal_dual_ordering(std::vector<Coflow> coflows, Bigswitch 
       }
       float term;
       term = (float)(J[j].w_k - sum_v_beta) / (float)J[j].v_k[p_k[k-1]];
-      //printf("beta for coflow considered %f\n",term );
       if(term < min_beta){
         min_beta = term;
         min_j = j;
@@ -146,21 +136,13 @@ std::vector<Coflow> primal_dual_ordering(std::vector<Coflow> coflows, Bigswitch 
     }
     beta[k-1] = min_beta;
 
-    //printf("min_j now is %d\n",min_j );
     J[min_j].scheduled = numCoflows - k + 1;   //note that the final numbering goes from 1 to numCoflows
 
 
   }
 
-  //this the algo
-    //1)find the bottleneck port in the set of jobs
-    //2)find the minimum beta and the job which minimizes beta
-    //3)remove the job from the set of jobs and repeat
-
-  //now print the final output
   int p;
   for(p=0;p<numCoflows;p++){
-    // printf("Coflow %d : Scheduled at number %d\n",p+1,J[p].scheduled );
   }
 
   std::vector<Coflow> v = coflows;
