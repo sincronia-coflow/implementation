@@ -1,6 +1,7 @@
 package client
 
 import (
+	"bytes"
 	"fmt"
 	"net"
 	"time"
@@ -69,7 +70,7 @@ func (r Recv) Send(call scheduler.Receiver_send) error {
 		Info: Data{
 			DataID: params.DataID(),
 			Size:   uint32(len(blob)),
-			Blob:   blob,
+			Blob:   bytes.NewReader(blob),
 		},
 	}
 

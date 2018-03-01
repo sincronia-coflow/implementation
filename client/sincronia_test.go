@@ -1,6 +1,7 @@
 package client
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"os/exec"
@@ -64,7 +65,7 @@ func TestSincronia(t *testing.T) {
 				Info: Data{
 					DataID: 0,
 					Size:   5,
-					Blob:   []byte{'h', 'e', 'l', 'l', 'o'},
+					Blob:   bytes.NewReader([]byte{'h', 'e', 'l', 'l', 'o'}),
 				},
 			},
 			Flow{
@@ -74,7 +75,7 @@ func TestSincronia(t *testing.T) {
 				Info: Data{
 					DataID: 1,
 					Size:   5,
-					Blob:   []byte{'h', 'e', 'l', 'l', 'o'},
+					Blob:   bytes.NewReader([]byte{'h', 'e', 'l', 'l', 'o'}),
 				},
 			},
 		},
@@ -90,7 +91,7 @@ func TestSincronia(t *testing.T) {
 				Info: Data{
 					DataID: 2,
 					Size:   5,
-					Blob:   []byte{'h', 'e', 'l', 'l', 'o'},
+					Blob:   bytes.NewReader([]byte{'h', 'e', 'l', 'l', 'o'}),
 				},
 			},
 			Flow{
@@ -100,7 +101,7 @@ func TestSincronia(t *testing.T) {
 				Info: Data{
 					DataID: 3,
 					Size:   5,
-					Blob:   []byte{'a', 'g', 'a', 'i', 'n'},
+					Blob:   bytes.NewReader([]byte{'a', 'g', 'a', 'i', 'n'}),
 				},
 			},
 		},
@@ -136,7 +137,7 @@ func TestOneDirection(t *testing.T) {
 				Info: Data{
 					DataID: 0,
 					Size:   5,
-					Blob:   []byte{'h', 'e', 'l', 'l', 'o'},
+					Blob:   bytes.NewReader([]byte{'h', 'e', 'l', 'l', 'o'}),
 				},
 			},
 			Flow{
@@ -146,7 +147,7 @@ func TestOneDirection(t *testing.T) {
 				Info: Data{
 					DataID: 3,
 					Size:   5,
-					Blob:   []byte{'h', 'e', 'l', 'l', 'o'},
+					Blob:   bytes.NewReader([]byte{'h', 'e', 'l', 'l', 'o'}),
 				},
 			},
 		},
@@ -162,7 +163,7 @@ func TestOneDirection(t *testing.T) {
 				Info: Data{
 					DataID: 1,
 					Size:   5,
-					Blob:   []byte{'a', 'g', 'a', 'i', 'n'},
+					Blob:   bytes.NewReader([]byte{'a', 'g', 'a', 'i', 'n'}),
 				},
 			},
 			Flow{
@@ -172,7 +173,7 @@ func TestOneDirection(t *testing.T) {
 				Info: Data{
 					DataID: 2,
 					Size:   3,
-					Blob:   []byte{'f', 'o', 'o'},
+					Blob:   bytes.NewReader([]byte{'f', 'o', 'o'}),
 				},
 			},
 		},
@@ -207,7 +208,7 @@ func TestCrossing(t *testing.T) {
 				Info: Data{
 					DataID: 0,
 					Size:   6,
-					Blob:   []byte{'h', 'e', 'l', 'l', 'o', '!'},
+					Blob:   bytes.NewReader([]byte{'h', 'e', 'l', 'l', 'o', '!'}),
 				},
 			},
 			//Flow{
@@ -233,7 +234,7 @@ func TestCrossing(t *testing.T) {
 				Info: Data{
 					DataID: 2,
 					Size:   4,
-					Blob:   []byte{'b', 'e', 'a', 'r'},
+					Blob:   bytes.NewReader([]byte{'b', 'e', 'a', 'r'}),
 				},
 			},
 			Flow{
@@ -243,7 +244,7 @@ func TestCrossing(t *testing.T) {
 				Info: Data{
 					DataID: 3,
 					Size:   3,
-					Blob:   []byte{'f', 'o', 'o'},
+					Blob:   bytes.NewReader([]byte{'f', 'o', 'o'}),
 				},
 			},
 		},
@@ -278,7 +279,7 @@ func TestSpecial(t *testing.T) {
 				Info: Data{
 					DataID: 0,
 					Size:   5,
-					Blob:   []byte{'h', 'e', 'l', 'l', 'o'},
+					Blob:   bytes.NewReader([]byte{'h', 'e', 'l', 'l', 'o'}),
 				},
 			},
 		},
@@ -294,7 +295,7 @@ func TestSpecial(t *testing.T) {
 				Info: Data{
 					DataID: 1,
 					Size:   5,
-					Blob:   []byte{'a', 'g', 'a', 'i', 'n'},
+					Blob:   bytes.NewReader([]byte{'a', 'g', 'a', 'i', 'n'}),
 				},
 			},
 			Flow{
@@ -304,7 +305,7 @@ func TestSpecial(t *testing.T) {
 				Info: Data{
 					DataID: 2,
 					Size:   3,
-					Blob:   []byte{'f', 'o', 'o'},
+					Blob:   bytes.NewReader([]byte{'f', 'o', 'o'}),
 				},
 			},
 		},
@@ -319,7 +320,7 @@ func TestSpecial(t *testing.T) {
 				Info: Data{
 					DataID: 3,
 					Size:   5,
-					Blob:   []byte{'a', 'g', 'a', 'i', 'n'},
+					Blob:   bytes.NewReader([]byte{'a', 'g', 'a', 'i', 'n'}),
 				},
 			},
 		},
@@ -334,7 +335,7 @@ func TestSpecial(t *testing.T) {
 				Info: Data{
 					DataID: 4,
 					Size:   5,
-					Blob:   []byte{'a', 'g', 'a', 'i', 'n'},
+					Blob:   bytes.NewReader([]byte{'a', 'g', 'a', 'i', 'n'}),
 				},
 			},
 		},
@@ -342,6 +343,52 @@ func TestSpecial(t *testing.T) {
 
 	<-time.After(5 * time.Millisecond)
 	appMaster("127.0.0.1:16424", []Coflow{cf1, cf2, cf3, cf4})
+	done <- struct{}{}
+}
+
+// will give you as much junk data as you request
+type infRead struct{}
+
+func (i infRead) Read(p []byte) (n int, err error) {
+	for i := range p {
+		p[i] = byte('a')
+	}
+
+	return len(p), nil
+}
+
+func TestLargeFlow(t *testing.T) {
+	done := make(chan interface{})
+	go func() {
+		c := make(chan os.Signal)
+		signal.Notify(c, syscall.SIGTERM)
+
+		<-c
+		done <- struct{}{}
+	}()
+	ready := make(chan interface{})
+	go runScheduler(context.Background(), ready, done)
+	<-ready
+
+	// define coflows
+	cf1 := Coflow{
+		JobID: 1,
+		Flows: []Flow{
+			Flow{
+				JobID: 1,
+				From:  1,
+				To:    2,
+				Info: Data{
+					DataID: 0,
+					Size:   10000000,
+					Blob:   infRead{},
+				},
+			},
+		},
+	}
+
+	<-time.After(5 * time.Millisecond)
+	appMaster("127.0.0.1:16424", []Coflow{cf1})
 	done <- struct{}{}
 }
 

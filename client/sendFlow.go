@@ -113,7 +113,8 @@ dial:
 					"DataID":   f.f.Info.DataID,
 					"To":       f.f.To,
 					"Priority": prio,
-				}).Error("send - rpc send", err)
+					"err":      err,
+				}).Error("send - rpc send")
 				return err
 			}
 
@@ -121,7 +122,27 @@ dial:
 			d.SetDataID(f.f.Info.DataID)
 			d.SetFrom(f.f.From)
 			d.SetTo(f.f.To)
-			d.SetBlob(f.f.Info.Blob)
+
+			blob := make([]byte, f.f.Info.Size)
+			n, err := f.f.Info.Blob.Read(blob)
+			if uint32(n) != f.f.Info.Size {
+				log.WithFields(log.Fields{
+					"DataID":   f.f.Info.DataID,
+					"To":       f.f.To,
+					"read":     n,
+					"expected": f.f.Info.Size,
+				}).Error("send - not enough Read")
+				return err
+			} else if err != nil {
+				log.WithFields(log.Fields{
+					"DataID": f.f.Info.DataID,
+					"To":     f.f.To,
+					"err":    err,
+				}).Error("send - read data")
+				return err
+			}
+
+			d.SetBlob(blob)
 			return nil
 		},
 	).Struct()

@@ -3,6 +3,7 @@ package client
 import (
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"sync"
 	"time"
@@ -18,7 +19,7 @@ import (
 type Data struct {
 	DataID uint32
 	Size   uint32
-	Blob   []byte // can be un-set for registration
+	Blob   io.Reader // can be un-set for registration
 }
 
 // Flow is the transfer of a Data

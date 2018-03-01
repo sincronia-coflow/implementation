@@ -152,7 +152,7 @@ func (s *Sincronia) recvExpected(cf coflowSlice, done chan uint32) {
 
 	for f := range cf.incoming {
 		if d, ok := cf.recv[f.Info.DataID]; ok {
-			d.Blob = f.Info.Blob[:]
+			d.Blob = f.Info.Blob
 			go func(d Data) { cf.ret <- d }(d) // don't block on the application
 			log.WithFields(log.Fields{
 				"node":  node,
