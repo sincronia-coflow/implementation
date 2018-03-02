@@ -55,7 +55,7 @@ public:
         for (auto it = cf->pending_flows->begin(); it != cf->pending_flows->end(); it++) {
             std::cout 
                 << "(dataId: " << it->first 
-                << ", flow: <" << it->second.from << ", " << it->second.to << ", " << it->second.info.data_id << ">" 
+                << ", flow: <" << it->second.from << " -> " << it->second.to << ", " << it->second.info.data_id << ">" 
                 << "), ";
         }
 
@@ -150,6 +150,11 @@ public:
                     .data_id = it->getDataID(),
                         .size = it->getSize(),
                 };
+
+                std::cerr
+                    << "readying " << s.data_id
+                    << " with size " << s.size
+                    << std::endl;
 
                 auto f_pair = cf->pending_flows->find(s.data_id);
                 if (f_pair == cf->pending_flows->end()) {

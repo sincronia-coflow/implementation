@@ -3,6 +3,7 @@ package client
 import (
 	"bytes"
 	"context"
+	"io"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -18,7 +19,7 @@ import (
 func runScheduler(
 	c context.Context,
 	ready chan interface{},
-	done chan interface{},
+	done chan struct{},
 ) {
 	killer := exec.Command("killall", "sincronia-scheduler")
 	killer.Run()
@@ -38,11 +39,8 @@ func runScheduler(
 	cancel()
 }
 
-// steps
-// 1. start scheduler
-// 2. start application master
-func TestSincronia(t *testing.T) {
-	done := make(chan interface{})
+func setup() chan struct{} {
+	done := make(chan struct{})
 	go func() {
 		c := make(chan os.Signal)
 		signal.Notify(c, syscall.SIGTERM)
@@ -53,6 +51,15 @@ func TestSincronia(t *testing.T) {
 	ready := make(chan interface{})
 	go runScheduler(context.Background(), ready, done)
 	<-ready
+
+	return done
+}
+
+// steps
+// 1. start scheduler
+// 2. start application master
+func TestBasic(t *testing.T) {
+	done := setup()
 
 	// define coflows
 	cf1 := Coflow{
@@ -114,17 +121,7 @@ func TestSincronia(t *testing.T) {
 
 // two coflows on two nodes, all flows from 1 to 2
 func TestOneDirection(t *testing.T) {
-	done := make(chan interface{})
-	go func() {
-		c := make(chan os.Signal)
-		signal.Notify(c, syscall.SIGTERM)
-
-		<-c
-		done <- struct{}{}
-	}()
-	ready := make(chan interface{})
-	go runScheduler(context.Background(), ready, done)
-	<-ready
+	done := setup()
 
 	// define coflows
 	cf1 := Coflow{
@@ -185,17 +182,7 @@ func TestOneDirection(t *testing.T) {
 
 // Two coflows on two nodes, exchanging data
 func TestCrossing(t *testing.T) {
-	done := make(chan interface{})
-	go func() {
-		c := make(chan os.Signal)
-		signal.Notify(c, syscall.SIGTERM)
-
-		<-c
-		done <- struct{}{}
-	}()
-	ready := make(chan interface{})
-	go runScheduler(context.Background(), ready, done)
-	<-ready
+	done := setup()
 
 	// define coflows
 	cf1 := Coflow{
@@ -256,17 +243,7 @@ func TestCrossing(t *testing.T) {
 }
 
 func TestSpecial(t *testing.T) {
-	done := make(chan interface{})
-	go func() {
-		c := make(chan os.Signal)
-		signal.Notify(c, syscall.SIGTERM)
-
-		<-c
-		done <- struct{}{}
-	}()
-	ready := make(chan interface{})
-	go runScheduler(context.Background(), ready, done)
-	<-ready
+	done := setup()
 
 	// define coflows
 	cf1 := Coflow{
@@ -358,17 +335,7 @@ func (i infRead) Read(p []byte) (n int, err error) {
 }
 
 func TestLargeFlow(t *testing.T) {
-	done := make(chan interface{})
-	go func() {
-		c := make(chan os.Signal)
-		signal.Notify(c, syscall.SIGTERM)
-
-		<-c
-		done <- struct{}{}
-	}()
-	ready := make(chan interface{})
-	go runScheduler(context.Background(), ready, done)
-	<-ready
+	done := setup()
 
 	// define coflows
 	cf1 := Coflow{
@@ -380,8 +347,33 @@ func TestLargeFlow(t *testing.T) {
 				To:    2,
 				Info: Data{
 					DataID: 0,
-					Size:   10000000,
-					Blob:   infRead{},
+					Size:   1e7,
+					Blob:   io.LimitReader(infRead{}, 1e7),
+				},
+			},
+		},
+	}
+
+	<-time.After(5 * time.Millisecond)
+	appMaster("127.0.0.1:16424", []Coflow{cf1})
+	done <- struct{}{}
+}
+
+func TestLargeFlowOddSize(t *testing.T) {
+	done := setup()
+
+	// define coflows
+	cf1 := Coflow{
+		JobID: 1,
+		Flows: []Flow{
+			Flow{
+				JobID: 1,
+				From:  1,
+				To:    2,
+				Info: Data{
+					DataID: 0,
+					Size:   1234567,
+					Blob:   io.LimitReader(infRead{}, 1234567),
 				},
 			},
 		},
@@ -471,7 +463,29 @@ func client(
 						log.WithFields(log.Fields{
 							"node":   id,
 							"dataid": r.DataID,
-						}).Info("flow done")
+						}).Info("flow incoming")
+
+						go func(d Data) {
+							sum := 0
+							for chunk := range d.Recv {
+								sum += len(chunk)
+							}
+
+							if sum != int(d.Size) {
+								log.WithFields(log.Fields{
+									"node":       id,
+									"dataid":     d.DataID,
+									"size":       d.Size,
+									"recvd size": sum,
+								}).Panic("flow size mismatch")
+							}
+
+							log.WithFields(log.Fields{
+								"node":   id,
+								"dataid": d.DataID,
+								"size":   d.Size,
+							}).Info("flow done")
+						}(r)
 					}
 				case <-time.After(5 * time.Second):
 					log.WithFields(log.Fields{

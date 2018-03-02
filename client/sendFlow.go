@@ -2,6 +2,8 @@ package client
 
 import (
 	"context"
+	"fmt"
+	"io"
 	"net"
 	"time"
 
@@ -58,7 +60,7 @@ func diffServFromPriority(prio uint8) int {
 	panic("unreachable uint8")
 }
 
-func (f sendFlow) send(
+func (f *sendFlow) send(
 	ctx context.Context,
 	job uint32,
 	givenPrio uint32,
@@ -123,35 +125,51 @@ dial:
 			d.SetFrom(f.f.From)
 			d.SetTo(f.f.To)
 
-			blob := make([]byte, f.f.Info.Size)
+			blob := make([]byte, flowChunkSizeBytes)
 			n, err := f.f.Info.Blob.Read(blob)
-			if uint32(n) != f.f.Info.Size {
-				log.WithFields(log.Fields{
-					"DataID":   f.f.Info.DataID,
-					"To":       f.f.To,
-					"read":     n,
-					"expected": f.f.Info.Size,
-				}).Error("send - not enough Read")
-				return err
-			} else if err != nil {
+			if err != nil && err != io.EOF {
 				log.WithFields(log.Fields{
 					"DataID": f.f.Info.DataID,
 					"To":     f.f.To,
 					"err":    err,
-				}).Error("send - read data")
+				}).Panic("send - read data")
 				return err
+			} else if uint32(n) != flowChunkSizeBytes && uint32(n) != f.f.Info.Size {
+				log.WithFields(log.Fields{
+					"DataID":          f.f.Info.DataID,
+					"To":              f.f.To,
+					"read":            n,
+					"remaining size":  f.f.Info.Size,
+					"flow chunk size": flowChunkSizeBytes,
+				}).Panic("send - not enough Read")
+				return fmt.Errorf("send - not enough Read")
 			}
 
+			if f.f.Info.Size > flowChunkSizeBytes {
+				f.f.Info.Size -= flowChunkSizeBytes
+			} else {
+				blob = blob[:n]
+				f.f.Info.Size = 0
+			}
+
+			log.WithFields(log.Fields{
+				"DataID":         f.f.Info.DataID,
+				"To":             f.f.To,
+				"remaining size": f.f.Info.Size,
+				"should_send":    n,
+				"sending":        len(blob),
+			}).Info("send")
 			d.SetBlob(blob)
 			return nil
 		},
 	).Struct()
 
 	log.WithFields(log.Fields{
-		"DataID":   f.f.Info.DataID,
-		"To":       f.f.To,
-		"Priority": prio,
-	}).Info("sent")
+		"DataID":         f.f.Info.DataID,
+		"To":             f.f.To,
+		"Priority":       prio,
+		"remaining size": f.f.Info.Size,
+	}).Info("sent chunk")
 
 	f.done <- struct{}{}
 }

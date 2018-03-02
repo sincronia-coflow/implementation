@@ -70,7 +70,7 @@ func (r Recv) Send(call scheduler.Receiver_send) error {
 		Info: Data{
 			DataID: params.DataID(),
 			Size:   uint32(len(blob)),
-			Blob:   bytes.NewReader(blob),
+			Blob:   bytes.NewBuffer(blob),
 		},
 	}
 

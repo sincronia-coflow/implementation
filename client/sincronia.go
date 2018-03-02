@@ -16,10 +16,13 @@ import (
 
 // Data is the external type for a piece of data to transfer
 // The application must assign each piece of data a unique id.
+// Blob is for outgoing application bytes, and Recv is for
+// incoming received data.
 type Data struct {
 	DataID uint32
 	Size   uint32
-	Blob   io.Reader // can be un-set for registration
+	Blob   io.Reader   // can be un-set for registration
+	Recv   chan []byte // can be un-set for registration
 }
 
 // Flow is the transfer of a Data
@@ -46,7 +49,7 @@ type coflowSlice struct {
 	jobID  uint32
 	nodeID uint32
 	send   map[uint32]sendFlow
-	recv   map[uint32]Data
+	recv   map[uint32]*Data
 
 	incoming chan Flow
 	ret      chan Data // return received Data to SendCoflow caller over this channel
@@ -64,6 +67,9 @@ type Sincronia struct {
 	newCoflow   chan coflowSlice
 	stop        chan struct{}
 }
+
+// send flows in 1 MB chunks
+const flowChunkSizeBytes = 1000000
 
 // Sending Loop
 // 1. Poll the master for the CoflowSchedule
@@ -399,9 +405,4 @@ func (s *Sincronia) SendCoflow(
 	}()
 
 	return cf.ret, nil
-}
-
-func after(ch chan interface{}) {
-	<-time.After(100 * time.Millisecond)
-	ch <- struct{}{}
 }

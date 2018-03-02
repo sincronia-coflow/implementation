@@ -44,7 +44,7 @@ func (s *Sincronia) getSchedule() ([]coflowScheduleItem, error) {
 	return sch, nil
 }
 
-func (s *Sincronia) coflowReady(cf coflowSlice) (toRecv map[uint32]Data) {
+func (s *Sincronia) coflowReady(cf coflowSlice) (toRecv map[uint32]*Data) {
 rpcReq:
 	recvsRet, err := s.schedClient.SendCoflow(
 		s.ctx,
@@ -62,7 +62,7 @@ rpcReq:
 				return err
 			}
 
-			i := 0
+			i := 0 // for some reason, capnp panics if we do i, sf := range cf.send
 			for _, sf := range cf.send {
 				d := sfs.At(i)
 				i++
@@ -86,15 +86,21 @@ rpcReq:
 		panic(err)
 	}
 
-	toRecv = make(map[uint32]Data)
+	toRecv = make(map[uint32]*Data)
 	for i := 0; i < recvs.Len(); i++ {
 		r := recvs.At(i)
 		d := Data{
 			DataID: r.DataID(),
 			Size:   r.Size(),
+			Recv:   make(chan []byte),
 		}
 
-		toRecv[d.DataID] = d
+		// Return this currently empty Data to the caller.
+		// When the data arrives, we will send it over chan Recv.
+		// When all the data arrives, we will close chan Recv
+		// When all flows are done receiving, we will close cf.ret.
+		go func(d Data) { cf.ret <- d }(d) // don't block on the application
+		toRecv[d.DataID] = &d
 	}
 
 	return
@@ -107,16 +113,29 @@ func (cf *coflowSlice) sendOneFlow(s *Sincronia, prio uint32) {
 
 	// pick an arbtrary flow
 	for dataid, sf := range cf.send {
-		log.WithFields(log.Fields{
-			"node":      s.NodeID,
-			"coflow":    cf.jobID,
-			"flow":      sf,
-			"remaining": cf.send,
-		}).Info("sending flow")
-		delete(cf.send, dataid)
+		if sf.f.Info.Size <= flowChunkSizeBytes {
+			log.WithFields(log.Fields{
+				"node":            s.NodeID,
+				"coflow":          cf.jobID,
+				"flow":            sf,
+				"remaining flows": cf.send,
+			}).Info("sending last flow chunk")
+			delete(cf.send, dataid)
+		} else {
+			log.WithFields(log.Fields{
+				"node":            s.NodeID,
+				"coflow":          cf.jobID,
+				"flow":            sf,
+				"remaining flows": cf.send,
+			}).Info("sending flow chunk")
+		}
+
 		go sf.send(s.ctx, cf.jobID, prio, s.nodeMap)
 		select {
 		case <-sf.done:
+			if sf.f.Info.Size > 0 {
+				cf.send[dataid] = sf
+			}
 		case <-time.After(10 * time.Second):
 			log.WithFields(log.Fields{
 				"node":      s.NodeID,
@@ -138,7 +157,7 @@ func (s *Sincronia) recvExpected(cf coflowSlice, done chan uint32) {
 		return
 	}
 
-	recvsCopy := make(map[uint32]Data)
+	recvsCopy := make(map[uint32]*Data)
 	for k, v := range cf.recv {
 		recvsCopy[k] = v
 	}
@@ -152,24 +171,67 @@ func (s *Sincronia) recvExpected(cf coflowSlice, done chan uint32) {
 
 	for f := range cf.incoming {
 		if d, ok := cf.recv[f.Info.DataID]; ok {
-			d.Blob = f.Info.Blob
-			go func(d Data) { cf.ret <- d }(d) // don't block on the application
-			log.WithFields(log.Fields{
-				"node":  node,
-				"job":   cf.jobID,
-				"data":  d.DataID,
-				"from":  f.From,
-				"where": "recvExpected",
-			}).Info("returned received data to caller")
-			delete(cf.recv, d.DataID)
+			if f.Info.Size > d.Size {
+				// panic instead of underflowing the uint32
+				log.WithFields(log.Fields{
+					"node":      node,
+					"job":       cf.jobID,
+					"data":      d.DataID,
+					"from":      f.From,
+					"remaining": d.Size,
+					"got":       f.Info.Size,
+					"where":     "recvExpected",
+				}).Panic("received flow chunk")
+			}
+
+			d.Size -= f.Info.Size
+			if d.Size > 0 {
+				log.WithFields(log.Fields{
+					"node":      node,
+					"job":       cf.jobID,
+					"data":      d.DataID,
+					"from":      f.From,
+					"remaining": d.Size,
+					"where":     "recvExpected",
+				}).Info("received flow chunk")
+				go func(ret chan []byte, f Flow) {
+					buf := make([]byte, f.Info.Size)
+					f.Info.Blob.Read(buf)
+					ret <- buf
+				}(d.Recv, f)
+			} else {
+				log.WithFields(log.Fields{
+					"node":  node,
+					"job":   cf.jobID,
+					"data":  d.DataID,
+					"from":  f.From,
+					"where": "recvExpected",
+				}).Info("received flow")
+
+				go func(ret chan []byte, f Flow) {
+					buf := make([]byte, f.Info.Size)
+					f.Info.Blob.Read(buf)
+					ret <- buf
+					close(d.Recv)
+				}(d.Recv, f)
+				delete(cf.recv, d.DataID)
+			}
+
 			if len(cf.recv) == 0 {
+				log.WithFields(log.Fields{
+					"node":  node,
+					"job":   cf.jobID,
+					"data":  d.DataID,
+					"from":  f.From,
+					"where": "recvExpected",
+				}).Info("coflow done receiving expected flows")
 				break
 			}
 		} else if _, ok := recvsCopy[f.Info.DataID]; ok {
 			log.WithFields(log.Fields{
 				"node":  node,
 				"job":   cf.jobID,
-				"data":  d.DataID,
+				"data":  f.Info.DataID,
 				"from":  f.From,
 				"where": "recvExpected",
 			}).Warn("received flow duplicate")
@@ -177,7 +239,7 @@ func (s *Sincronia) recvExpected(cf coflowSlice, done chan uint32) {
 			log.WithFields(log.Fields{
 				"node":  node,
 				"job":   cf.jobID,
-				"data":  d.DataID,
+				"data":  f.Info.DataID,
 				"from":  f.From,
 				"where": "recvExpected",
 			}).Warn("received unexpected flow")
