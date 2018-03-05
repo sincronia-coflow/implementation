@@ -4,12 +4,11 @@ import (
 	"sort"
 	"time"
 
-	"./scheduler"
-
+	"github.com/akshayknarayan/sincronia/client/scheduler"
 	log "github.com/sirupsen/logrus"
 )
 
-func (s *Sinchronia) getSchedule() ([]coflowScheduleItem, error) {
+func (s *Sincronia) getSchedule() ([]coflowScheduleItem, error) {
 	scheduleRes, err := s.schedClient.GetSchedule(
 		s.ctx,
 		func(
@@ -44,7 +43,7 @@ func (s *Sinchronia) getSchedule() ([]coflowScheduleItem, error) {
 	return sch, nil
 }
 
-func (s *Sinchronia) coflowReady(cf coflowSlice) (toRecv map[uint32]Data) {
+func (s *Sincronia) coflowReady(cf coflowSlice) (toRecv map[uint32]Data) {
 rpcReq:
 	recvsRet, err := s.schedClient.SendCoflow(
 		s.ctx,
@@ -100,7 +99,7 @@ rpcReq:
 	return
 }
 
-func (cf *coflowSlice) sendOneFlow(s *Sinchronia, prio uint32) {
+func (cf *coflowSlice) sendOneFlow(s *Sincronia, prio uint32) {
 	if len(cf.send) == 0 {
 		return
 	}
@@ -129,7 +128,7 @@ func (cf *coflowSlice) sendOneFlow(s *Sinchronia, prio uint32) {
 	}
 }
 
-func (s *Sinchronia) recvExpected(cf coflowSlice, done chan uint32) {
+func (s *Sincronia) recvExpected(cf coflowSlice, done chan uint32) {
 	// receive expected flows
 	node := s.NodeID
 	if len(cf.recv) == 0 {

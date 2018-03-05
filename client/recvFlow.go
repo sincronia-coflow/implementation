@@ -5,8 +5,7 @@ import (
 	"net"
 	"time"
 
-	"./scheduler"
-
+	"github.com/akshayknarayan/sincronia/client/scheduler"
 	log "github.com/sirupsen/logrus"
 	"zombiezen.com/go/capnproto2/rpc"
 )

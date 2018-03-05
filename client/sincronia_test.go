@@ -12,18 +12,18 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// small-scale localhost test for sinchronia library and scheduler
+// small-scale localhost test for sincronia library and scheduler
 
 func runScheduler(
 	c context.Context,
 	ready chan interface{},
 	done chan interface{},
 ) {
-	killer := exec.Command("killall", "sinchronia-scheduler")
+	killer := exec.Command("killall", "sincronia-scheduler")
 	killer.Run()
 	ctx, cancel := context.WithCancel(c)
 	logF, err := os.Create("scheduler-test.log")
-	cmd := exec.CommandContext(ctx, "../scheduler/sinchronia-scheduler")
+	cmd := exec.CommandContext(ctx, "../scheduler/sincronia-scheduler")
 	cmd.Stdout = logF
 	cmd.Stderr = logF
 	err = cmd.Start()
@@ -40,7 +40,7 @@ func runScheduler(
 // steps
 // 1. start scheduler
 // 2. start application master
-func TestSinchronia(t *testing.T) {
+func TestSincronia(t *testing.T) {
 	done := make(chan interface{})
 	go func() {
 		c := make(chan os.Signal)

@@ -1,5 +1,5 @@
-#ifndef SINCHRONIA_COFLOW_H
-#define SINCHRONIA_COFLOW_H
+#ifndef SINCRONIA_COFLOW_H
+#define SINCRONIA_COFLOW_H
 
 #include <iostream>
 #include <map>

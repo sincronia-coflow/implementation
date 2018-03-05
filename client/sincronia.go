@@ -7,8 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"./scheduler"
-
+	"github.com/akshayknarayan/sincronia/client/scheduler"
 	log "github.com/sirupsen/logrus"
 	"zombiezen.com/go/capnproto2/rpc"
 )
@@ -51,10 +50,10 @@ type coflowSlice struct {
 	ret      chan Data // return received Data to SendCoflow caller over this channel
 }
 
-// Sinchronia manages interactions with the coflow scheduler
+// Sincronia manages interactions with the coflow scheduler
 // A "Node" is something which sends or receives flows belonging to coflows.
 // The application calling this library should give each Node a unique id.
-type Sinchronia struct {
+type Sincronia struct {
 	NodeID      uint32
 	schedClient scheduler.Scheduler
 	ctx         context.Context
@@ -67,7 +66,7 @@ type Sinchronia struct {
 // Sending Loop
 // 1. Poll the master for the CoflowSchedule
 // 2. Of all the local coflows, send the highest priority one
-func (s *Sinchronia) outgoing(newCf chan coflowSlice) {
+func (s *Sincronia) outgoing(newCf chan coflowSlice) {
 	var err error
 	coflows := make(map[uint32]coflowSlice)
 	var currSchedule []coflowScheduleItem
@@ -143,7 +142,7 @@ func (s *Sinchronia) outgoing(newCf chan coflowSlice) {
 
 // Receiving
 // Distribute incoming flows across all coflows to the correct coflowSlice
-func (s *Sinchronia) incoming(newCf chan coflowSlice) {
+func (s *Sincronia) incoming(newCf chan coflowSlice) {
 	coflows := make(map[uint32]coflowSlice)
 	orphanage := make(map[uint32][]Flow)
 	done := make(chan uint32)
@@ -214,7 +213,7 @@ func (s *Sinchronia) incoming(newCf chan coflowSlice) {
 	}
 }
 
-func (s *Sinchronia) newCoflows() {
+func (s *Sincronia) newCoflows() {
 	newOutgoingCfs := make(chan coflowSlice)
 	go s.outgoing(newOutgoingCfs)
 	newIncomingCfs := make(chan coflowSlice)
@@ -251,11 +250,11 @@ func (s *Sinchronia) newCoflows() {
 	}
 }
 
-// New returns a Sinchronia agent connected to the central scheduler
+// New returns a Sincronia agent connected to the central scheduler
 // schedAddr: central scheduler address
 // nodeID: the unique id of this node
 // nodeMap: a mapping of unique node ids to network addresses (i.e. 128.30.2.121:17000)
-func New(schedAddr string, nodeID uint32, nodes map[uint32]string) (*Sinchronia, error) {
+func New(schedAddr string, nodeID uint32, nodes map[uint32]string) (*Sincronia, error) {
 	conn, err := net.Dial("tcp4", schedAddr)
 	if err != nil {
 		return nil, fmt.Errorf("couldn't connect to coflow scheduler: %s", err)
@@ -270,7 +269,7 @@ func New(schedAddr string, nodeID uint32, nodes map[uint32]string) (*Sinchronia,
 	rpcConn := rpc.NewConn(rpc.StreamTransport(conn))
 	sch := scheduler.Scheduler{Client: rpcConn.Bootstrap(ctx)}
 
-	s := &Sinchronia{
+	s := &Sincronia{
 		NodeID:      nodeID,
 		schedClient: sch,
 		ctx:         ctx,
@@ -287,14 +286,14 @@ func New(schedAddr string, nodeID uint32, nodes map[uint32]string) (*Sinchronia,
 }
 
 // Stop this instance of the agent
-func (s *Sinchronia) Stop() {
+func (s *Sincronia) Stop() {
 	close(s.stop)
 }
 
 // RegCoflow called by application master to tell scheduler about all coflows.
 // Only call this once per coflow.
 // Coflow sizes need not be known in advance (set to 0)
-func (s *Sinchronia) RegCoflow(cfs []Coflow) {
+func (s *Sincronia) RegCoflow(cfs []Coflow) {
 	s.schedClient.RegCoflow(
 		s.ctx,
 		func(
@@ -335,7 +334,7 @@ func (s *Sinchronia) RegCoflow(cfs []Coflow) {
 	).Struct()
 }
 
-// SendCoflow tells sinchronia to send the CoflowSlice.
+// SendCoflow tells Sincronia to send the CoflowSlice.
 // Only call this method once per coflow per node.
 // When the central scheduler returns a coflow priority,
 // the flow is automatically sent over the network.
@@ -343,7 +342,7 @@ func (s *Sinchronia) RegCoflow(cfs []Coflow) {
 // DO NOT start sending goroutines
 //
 // Returns a channel on which incoming flows are returned
-func (s *Sinchronia) SendCoflow(
+func (s *Sincronia) SendCoflow(
 	jobID uint32,
 	flows []Flow,
 ) (chan Data, error) {

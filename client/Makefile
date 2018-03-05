@@ -1,12 +1,12 @@
-all: sinchronia.capnp.go
+all: sincronia.capnp.go
 	go build .
 
-capnp: sinchronia.capnp.go
+capnp: sincronia.capnp.go
 
-sinchronia.capnp.go:
-	capnp compile -I${GOPATH}/src/zombiezen.com/go/capnproto2/std -ogo ../sinchronia.capnp
+sincronia.capnp.go:
+	capnp compile -I${GOPATH}/src/zombiezen.com/go/capnproto2/std -ogo ../sincronia.capnp
 	mkdir -p ./scheduler
-	mv ../sinchronia.capnp.go ./scheduler/
+	mv ../sincronia.capnp.go ./scheduler/
 
 clean:
 	rm -rf ./scheduler

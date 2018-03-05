@@ -4,7 +4,7 @@
 #include <vector>
 #include <map>
 
-#include "sinchronia.capnp.h"
+#include "sincronia.capnp.h"
 #include <capnp/rpc-twoparty.h>
 #include <capnp/message.h>
 #include <kj/async.h>

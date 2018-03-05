@@ -1,12 +1,12 @@
-#ifndef SINCHRONIA_RPC_H
-#define SINCHRONIA_RPC_H
+#ifndef SINCRONIA_RPC_H
+#define SINCRONIA_RPC_H
 
 #include <iostream>
 #include <map>
 #include <vector>
 #include <time.h>
 
-#include "sinchronia.capnp.h"
+#include "sincronia.capnp.h"
 #include <capnp/ez-rpc.h>
 #include <kj/async.h>
 #include <kj/async-io.h>
