@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/akshayknarayan/sincronia/client/scheduler"
-
 	log "github.com/sirupsen/logrus"
 	"zombiezen.com/go/capnproto2/rpc"
 )
@@ -60,7 +59,6 @@ func (r Recv) Send(call scheduler.Receiver_send) error {
 		"jobid":  params.JobID(),
 		"dataId": params.DataID,
 		"read":   len(blob),
-		// 		"blob": blob,
 	}).Info("read")
 
 	r.done <- Flow{

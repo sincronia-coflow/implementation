@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/akshayknarayan/sincronia/client/scheduler"
-
 	log "github.com/sirupsen/logrus"
 	"zombiezen.com/go/capnproto2/rpc"
 )
@@ -96,7 +95,7 @@ func (s *Sincronia) outgoing(newCf chan coflowSlice) {
 			log.WithFields(log.Fields{
 				"node": s.NodeID,
 				"err":  err,
-			}).Warn("GetSchedule RPC")
+			}).Debug("GetSchedule RPC")
 			continue
 		}
 
@@ -104,33 +103,17 @@ func (s *Sincronia) outgoing(newCf chan coflowSlice) {
 			continue
 		}
 
-		//log.WithFields(log.Fields{
-		//	"node":         s.NodeID,
-		//	"currSchedule": currSchedule,
-		//}).Info("got schedule")
+		log.WithFields(log.Fields{
+			"node":         s.NodeID,
+			"currSchedule": currSchedule,
+		}).Debug("got schedule")
 
 		// 2. Of all the local coflows, send the highest priority one
 		for _, scheduled := range currSchedule {
-			//fmt.Println("Scheduled!!!! ",scheduled)
 			mu.Lock()
-			//fmt.Println("Coflows: ",coflows)
 			currCf, ok := coflows[scheduled.jobID]
-			//fmt.Println("Look here ",currCf)
 			mu.Unlock()
-			if !ok {
-				//fmt.Println("Not okay!!")
-				// this coflow already finished
-				//mu.Lock()
-				//log.WithFields(log.Fields{
-				//	"node":         s.NodeID,
-				//	"jobID":        scheduled.jobID,
-				//	"priority":     scheduled.priority,
-				//	"currSchedule": currSchedule,
-				//	"coflows":      coflows,
-				//}).Warn("scheduled coflow already finished")
-				//mu.Unlock()
-			} else {
-				//fmt.Println("Okay!!")
+			if ok {
 				log.WithFields(log.Fields{
 					"node":   s.NodeID,
 					"currCf": currCf.jobID,
@@ -192,8 +175,6 @@ func (s *Sincronia) incoming(newCf chan coflowSlice) {
 			// to collect it in cf.incoming.
 			if !ok {
 				if orphans, ok := orphanage[f.JobID]; ok {
-					//orphans = append(orphans, f)
-					//fmt.Println(orphans)
 					orphanage[f.JobID] = append(orphans, f)
 				} else {
 					orphanage[f.JobID] = []Flow{f}
@@ -202,8 +183,6 @@ func (s *Sincronia) incoming(newCf chan coflowSlice) {
 				log.WithFields(log.Fields{
 					"job":  f.JobID,
 					"node": s.NodeID,
-					// 					"coflows":   coflows,
-					// 					"orphanage": orphanage,
 				}).Info("putting in orphanage")
 				continue
 			}
@@ -214,7 +193,6 @@ func (s *Sincronia) incoming(newCf chan coflowSlice) {
 				log.WithFields(log.Fields{
 					"job":  f.JobID,
 					"node": s.NodeID,
-					// 					"coflows": coflows,
 				}).Info("receiving flow stuck")
 			}
 		case jid := <-done:
@@ -222,7 +200,6 @@ func (s *Sincronia) incoming(newCf chan coflowSlice) {
 			log.WithFields(log.Fields{
 				"job":  jid,
 				"node": s.NodeID,
-				// 				"coflows": coflows,
 			}).Info("coflow done incoming")
 		}
 	}
@@ -253,7 +230,6 @@ func (s *Sincronia) newCoflows() {
 				log.WithFields(log.Fields{
 					"node": s.NodeID,
 					"job":  cf.jobID,
-					// 					"coflow": cf,
 				}).Panic("new incoming stuck")
 			}
 		} else {

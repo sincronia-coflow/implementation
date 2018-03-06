@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/akshayknarayan/sincronia/client/scheduler"
-
 	log "github.com/sirupsen/logrus"
 )
 
