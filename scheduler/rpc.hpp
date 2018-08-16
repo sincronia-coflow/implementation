@@ -15,11 +15,9 @@
 #include <kj/debug.h>
 #include <sys/time.h>
 
-#include "sinchronia-coflow.hpp"
+#include "sincronia-coflow.hpp"
 #include "scheduler.hpp"
 #include "common.h"
-//std::ofstream myfile;
-//    myfile.open ("coflow-done.txt");
 class RpcHandler final : kj::TaskSet::ErrorHandler {
 public:
     RpcHandler(CoflowScheduler *sch);
