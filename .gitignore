@@ -1,5 +1,4 @@
 *.capnp.c++
 *.capnp.h
-*.capnp.go
-sinchronia-scheduler.dSYM/
-sinchronia-scheduler
+sincronia-scheduler.dSYM/
+sincronia-scheduler
