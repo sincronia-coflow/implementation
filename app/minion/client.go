@@ -2,8 +2,8 @@ package main
 
 import (
 	"fmt"
-	"github.com/akshayknarayan/sincronia/app/parser"
-	"github.com/akshayknarayan/sincronia/client"
+	"github.com/sincronia-coflow/implementation/app/parser"
+	"github.com/sincronia-coflow/implementation/client"
 	"net"
 	"os"
 	"sort"

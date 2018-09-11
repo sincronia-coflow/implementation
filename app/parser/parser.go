@@ -5,7 +5,7 @@ package parser
 import (
 	"bufio"
 	"bytes"
-	"github.com/akshayknarayan/sincronia/client"
+	"github.com/sincronia-coflow/implementation/client"
 	"io"
 	"os"
 	"strconv"

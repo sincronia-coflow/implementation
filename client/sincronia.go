@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/akshayknarayan/sincronia/client/scheduler"
+	"github.com/sincronia-coflow/implementation/client/scheduler"
 	log "github.com/sirupsen/logrus"
 	"zombiezen.com/go/capnproto2/rpc"
 )

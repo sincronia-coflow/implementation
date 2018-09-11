@@ -1,8 +1,8 @@
 package main
 
 import (
-	"github.com/akshayknarayan/sincronia/app/parser"
-	"github.com/akshayknarayan/sincronia/client"
+	"github.com/sincronia-coflow/implementation/app/parser"
+	"github.com/sincronia-coflow/implementation/client"
 	"os"
 
 	log "github.com/sirupsen/logrus"

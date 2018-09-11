@@ -34,8 +34,8 @@ The appmaster can be run on the same server as the central scheduler. It supplie
 To run the Appmaster, we first require installing go libraries -- a tracefile **parser** library and sincronia shim library **client**, which further requires 
 
 ```
-go get github.com/sincronia-coflow/implementation/sincronia/app/parser
-go get github.com/sincronia-coflow/implementation/sincronia/client
+go get github.com/sincronia-coflow/implementation/app/parser
+go get github.com/sincronia-coflow/implementation/client
 ```
 
 Now build and run the app master using following inside the **app/master/** directory
@@ -60,8 +60,8 @@ Line i+1:  <Coflow iID> <Arrival Time (in millisec)> <Number of Flows in Coflow 
 
 The client app requires the same go libraries on the client servers
 ```
-go get github.com/sincronia-coflow/implementation/sincronia/app/parser
-go get github.com/sincronia-coflow/implementation/sincronia/client
+go get github.com/sincronia-coflow/implementation/app/parser
+go get github.com/sincronia-coflow/implementation/client
 ```
 
 Then build and run the client app using

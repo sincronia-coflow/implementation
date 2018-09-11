@@ -7,7 +7,7 @@ import (
 	"net"
 	"time"
 
-	"github.com/akshayknarayan/sincronia/client/scheduler"
+	"github.com/sincronia-coflow/implementation/client/scheduler"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/net/ipv4"
 	"zombiezen.com/go/capnproto2/rpc"
